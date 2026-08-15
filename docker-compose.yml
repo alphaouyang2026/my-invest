@@ -33,18 +33,34 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot: applies pending migrations, then exits. backend and worker both
+  # wait for it to succeed, so exactly one process migrates and neither starts
+  # against a schema that isn't there yet.
+  migrate:
+    build: ./backend
+    env_file: .env
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+
   backend:
     build: ./backend
     restart: unless-stopped
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
       - backend_venv:/app/.venv
+      - ./.secrets/jquants_api_key:/run/secrets/jquants_api_key:ro
 
   # Single serial worker process — no Redis/Kafka/distributed task system
   # (spec §5.3). Same image as backend, different command.
@@ -54,11 +70,12 @@ services:
     env_file: .env
     command: ["uv", "run", "python", "-m", "app.worker.main"]
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./backend:/app
       - backend_venv:/app/.venv
+      - ./.secrets/jquants_api_key:/run/secrets/jquants_api_key:ro
 
   frontend:
     build: ./frontend
