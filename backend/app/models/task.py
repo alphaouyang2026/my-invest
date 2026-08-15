@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -37,6 +37,12 @@ class Task(Base):
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     progress: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Counts how many times this task has been claimed, including re-queues
+    # after a worker restart. Bounds crash-recovery retries and stamps the
+    # provenance of each publication — it is not a fencing token, since the
+    # single-worker deployment invariant makes fencing unnecessary.
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # timestamptz throughout: the system stores UTC internally and keeps the
     # market timezone alongside it (spec §11). A naive column would silently

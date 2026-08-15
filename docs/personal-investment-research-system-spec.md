@@ -177,11 +177,12 @@ PostgreSQL 是唯一的持久化基础设施，用于保存：
 |---|---:|---|---|
 | 上市标的主数据 | 快照 | 代码、名称、市场、行业、证券类别 | Prime 普通股股票池 |
 | 日线行情 | 日 | OHLCV、成交额、调整价格、调整因子 | 研究、信号、回测 |
+| 来源市场日历 | 日 | 日期、休市/交易日分类 | 同步范围发现；经校验后形成正式交易日历 |
 | 财务摘要 | 披露事件 | 披露时间、主要业绩与预测字段、版本 | 第二阶段基本面因子 |
 | 决算发表日历 | 事件 | 计划发表日期、证券代码 | 事件提示与研究 |
 | 模拟交易数据 | 模拟事件 | 订单、成交、持仓、现金、费用 | 组合和绩效分析 |
 
-第一版数据源为 J-Quants API V2 Free。根据 2026-08-11 的官方资料调查，免费版约有滚动两年历史、延迟 12 周、限制 5 calls/min 且不支持 CSV 批量下载；免费端点包括上市标的主数据、股票全日日线、财务摘要和决算发表日历。TOPIX、官方交易日历、完整财务报表、现金股息明细及分钟/Tick 数据不属于 Free。
+第一版数据源为 J-Quants API V2 Free。根据截至 2026-08-15 的官方资料复核，免费版约有滚动两年历史、延迟 12 周、限制 5 calls/min 且不支持 CSV 批量下载；免费端点包括上市标的主数据、股票全日日线、市场日历、财务摘要和决算发表日历。TOPIX、完整财务报表、现金股息明细及分钟/Tick 数据不属于 Free。
 
 详细权限、来源和变化风险见 [J-Quants API 免费版可用数据调查](research/jquants-free-plan-data.md)。套餐可能变化，每次升级或重新实施数据适配器前必须复核官方资料。
 
@@ -214,13 +215,17 @@ PostgreSQL 是唯一的持久化基础设施，用于保存：
 
 ### 6.4 同步、修订与快照
 
-- 后端按日或按周增量同步 J-Quants，并处理分页、每分钟 5 次限流、指数退避和 HTTP 429 重试；
+- 用户触发幂等的 `sync now`：首次抓取账户实际可见的完整历史，后续重取最近 30 个自然日，距离上次完整核对超过 30 天时自动执行完整核对；暂不提供定时调度或用户自选日期范围；
+- J-Quants 全市场日线按 `date` 请求。同步器先无参数读取来源市场日历以发现账户实际可见日期，再逐交易日抓取日线并遍历 `pagination_key`；不得依赖未文档化的超范围请求裁剪，也不得硬编码“两年”的精确边界；
+- 所有请求共享 5 calls/min 限流器，处理 `Retry-After`、带随机抖动的指数退避和 HTTP 429/可重试故障；首次或完整核对是允许持续数小时的后台任务；
+- 日线端点返回的证券事实在同步层全部保存，不按当前 Prime 名单或当前证券类别过滤；历史时点 Prime 普通股资格由股票池模块依据主数据快照判断；
 - 回测只读 PostgreSQL，不在运行期间调用外部数据源；
-- 规范化表保存当前值，同时记录来源版本、导入时间和发生变化的旧值；
+- 数据先写入不可见的 endpoint publication generation，完整分页并通过结构校验后以短事务发布；失败或取消的 generation 不改变此前正式数据；
+- 规范化记录以业务键和内容哈希区分新增、未变和上游修订；修订生成不可变新版本，旧值不物理覆盖；
 - 已完成回测绑定不可变的数据快照，不随数据修订自动改变；
-- 每次同步保存标的快照，为未来积累可靠的历史股票池；
+- 每次同步以日线实际 `coverage_end` 请求并保存对应日期的标的快照，为未来积累可靠的历史股票池；不使用今天的主数据冒充历史状态，也不虚构首次同步之前的历史成员关系；
 - 免费历史无法证明包含完整退市证券，旧区间回测必须显示潜在幸存者偏差警告；
-- 普通实验的详细事件默认保留 90 天，运行定义、汇总指标、月度净值和数据版本永久保留；重要运行可以固定全部明细。
+- 脱敏原始响应、失败 generation 和临时 staging 默认保留 90 天；规范化版本、标的快照、运行/publication 元数据、覆盖范围和内容哈希永久保留。
 
 ## 7. 日本市场与股票池规则
 
@@ -249,7 +254,7 @@ PostgreSQL 是唯一的持久化基础设施，用于保存：
 
 所有规则仅用于历史模拟，不用于校验或发送真实订单。
 
-J-Quants Free 不提供官方交易日历。第一版从历史日线实际出现日期推导历史交易日，但交易日历位于可替换的数据适配器接口；升级套餐或增加可靠来源后替换为正式日历。推导结果不得用于预测未来交易日。
+当前 J-Quants V2 Free 提供市场日历端点。数据同步模块只把它作为来源可见日期发现机制，用于逐日规划行情请求；来源权限窗口不直接等同于系统认可的市场规则。数据质量模块将来源日历规范化、与行情交叉校验并通过可替换的 TradingCalendar interface 提供 `is_open`、前一/下一交易日和交易日窗口等业务能力。未经校验的来源日期不得直接供股票池或回测使用。
 
 ## 8. 研究、信号与策略
 
@@ -406,9 +411,12 @@ J-Quants Free 阶段禁止标记为 `VALIDATED`。约两年历史在扣除动量
 
 | 实体 | 关键字段 |
 |---|---|
-| Instrument | instrument_id、market、exchange、symbol、currency、status |
+| Instrument | instrument_id、source、source_code、exchange、currency、created_at |
+| InstrumentMasterSnapshot | snapshot_id、source、as_of_date、sync_run_id |
+| InstrumentMasterSnapshotMember | snapshot_id、instrument_id、symbol、name、market、classification、content_hash |
 | TradingCalendar | market、trade_date、is_open、session |
-| Bar | instrument_id、timestamp、OHLCV、source、quality_status |
+| BarVersion | instrument_id、trade_date、session、raw/adjusted OHLCV、adjustment_factor、source、content_hash、first/last_seen_at、quality_status |
+| SyncRun/EndpointPublication | run_id、mode、status、adapter_version、schema_fingerprint、requested/actual range、counts、published_at |
 | FundamentalFact | instrument_id、period、publish_time、field、value、version |
 | Feature | instrument_id、as_of、feature_name、value、pipeline_version |
 | Signal | signal_id、instrument_id、as_of、strategy_version、score、reasons |
@@ -485,7 +493,7 @@ GET  /api/v1/sim-accounts/{id}/performance
 - 常用页面查询 P95 小于 2 秒；
 - 后台回测不得阻塞普通查询；
 - 回测进度和预计处理范围可见；
-- 第一版以 J-Quants Free 可见的约两年日线和 Prime 普通股为容量目标。
+- 第一版存储容量覆盖 J-Quants Free 股票日线端点实际可见的约两年全部返回记录；投资与回测股票池仍默认限定为 Prime 普通股。
 
 ### 14.3 安全与备份
 
@@ -527,12 +535,12 @@ GET  /api/v1/sim-accounts/{id}/performance
 - 黄金数据测试：固定数据快照对应固定信号及回测结果；
 - 回放测试：完整历史区间的模拟交易；
 - 时间隔离测试：历史重放的所有查询都无法读取 `as_of` 之后的数据；
-- 数据适配测试：J-Quants 分页、限流、429 重试、修订和覆盖范围；
+- 数据适配测试：J-Quants 日历范围发现、逐日行情、分页、限流、429/`Retry-After` 重试、schema 变化、空响应、修订、generation 原子可见性和覆盖范围；普通 CI 使用脱敏 fixtures，不调用真实 J-Quants；
 - 端到端测试：前端创建回测并查看结果。
 
 ### 16.2 验收条件
 
-- 系统能够通过 J-Quants V2 Free 导入 Prime 普通股主数据和历史日线；
+- 系统能够通过 J-Quants V2 Free 发现账户可见日期并导入主数据和全市场历史日线，随后在股票池层筛选历史时点 Prime 普通股；真实 Free key 的 calendar、master 和单日 bars smoke sync 是数据源验收条件；
 - 能运行 6 个月动量、跳过 1 个月、20 只等权的黄金基准策略；
 - 能按周进行隐藏未来数据的历史重放，并创建不可覆盖的决策分支；
 - 模拟订单、成交、持仓、现金和净值保持一致；
@@ -546,13 +554,12 @@ GET  /api/v1/sim-accounts/{id}/performance
 ### Phase 0：基础架构
 
 - 建立前端、后端和 PostgreSQL 三层项目；
-- 完成数据库迁移、配置、日志和任务框架；
-- 定义日本证券标识、可替换交易日历接口和市场规则。
+- 完成数据库迁移、配置、日志和任务框架。
 
 ### Phase 1：数据与研究
 
-- 接入 J-Quants V2 Free 的主数据和历史日线，实测各端点覆盖范围；
-- 完成数据质量检查和点时一致性处理；
+- 接入 J-Quants V2 Free 的来源日历、主数据和历史日线，实测各端点覆盖范围并建立稳定证券身份；
+- 完成正式交易日历、数据质量检查和点时一致性处理；
 - 实现 Prime 普通股股票池、流动性过滤和动量信号展示。
 
 ### Phase 2：回测
@@ -586,7 +593,7 @@ GET  /api/v1/sim-accounts/{id}/performance
 
 ## 19. 已确认产品决策
 
-1. 第一版市场为东京证券交易所 Prime Market 普通股；
+1. 第一版投资与回测股票池为东京证券交易所 Prime Market 普通股；同步层保留 J-Quants 股票日线端点返回的全部证券事实，不用当前名单过滤历史行情；
 2. 数据源为 J-Quants API V2 Free，只使用日线，免费阶段定位为原型；
 3. 核心用途是量化策略验证、个人选股和目标权重建议；
 4. 同时支持一次性回测和按周交互的历史重放；

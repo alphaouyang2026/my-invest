@@ -1,5 +1,7 @@
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +15,14 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
 
     log_level: str = "INFO"
+    jquants_api_key: str | None = None
+    jquants_api_key_file: Path | None = None
+
+    @model_validator(mode="after")
+    def validate_jquants_key_sources(self) -> "Settings":
+        if self.jquants_api_key and self.jquants_api_key_file:
+            raise ValueError("JQUANTS_API_KEY and JQUANTS_API_KEY_FILE are mutually exclusive")
+        return self
 
     @property
     def database_url(self) -> str:
@@ -25,3 +35,18 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def resolve_jquants_api_key(settings: Settings | None = None) -> str | None:
+    settings = settings or get_settings()
+    if settings.jquants_api_key:
+        return settings.jquants_api_key.strip() or None
+    if settings.jquants_api_key_file:
+        try:
+            value = settings.jquants_api_key_file.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise ValueError("J-Quants API key file cannot be read") from exc
+        if not value:
+            raise ValueError("J-Quants API key file is empty")
+        return value
+    return None

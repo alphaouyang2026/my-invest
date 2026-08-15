@@ -60,6 +60,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_venv:/app/.venv
+      - ./.secrets/jquants_api_key:/run/secrets/jquants_api_key:ro
 
   # Single serial worker process — no Redis/Kafka/distributed task system
   # (spec §5.3). Same image as backend, different command.
@@ -74,6 +75,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_venv:/app/.venv
+      - ./.secrets/jquants_api_key:/run/secrets/jquants_api_key:ro
 
   frontend:
     build: ./frontend
