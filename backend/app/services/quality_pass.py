@@ -6,6 +6,14 @@ inserted. They run once, after every batch has published and before the
 snapshot is activated, and write aggregated findings rather than touching the
 immutable version rows.
 
+Every rule aggregates in SQL. The first version of this module loaded each
+observed bar into Python and counted there, which is fine for the thousand rows
+a test builds and fatal for the two million a real initial import produces: the
+worker was killed by the kernel three times before hitting its attempt cap. A
+finding is an aggregate over (rule, trade date), so the database is where it
+should be computed; only the aggregates and a capped sample ever cross into
+Python.
+
 Two rules people expect to find here are deliberately absent. Duplicate
 business keys and rows dated outside their request are caught while writing,
 because the evidence is gone by the time a pass could look, and failing the
@@ -16,16 +24,13 @@ defect, and a check that cries wolf teaches people to ignore findings.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models.market_data import (
-    BarQualityStatus,
     BarRecord,
     BarVersion,
     DataSnapshot,
@@ -40,20 +45,6 @@ from app.models.market_data import (
 )
 from app.services.calendar_port import CalendarCoverageError, CalendarPort
 from app.services.quality_rules import QualityPolicy, QualityRule
-
-
-@dataclass(frozen=True)
-class _Observed:
-    """One bar as this run last saw it."""
-
-    trade_date: date
-    code: str
-    raw_close: Decimal | None
-    adjusted_close: Decimal | None
-    raw_volume: Decimal | None
-    adjustment_factor: Decimal | None
-    quality_status: BarQualityStatus
-    quality_rules: list[str]
 
 
 @dataclass(frozen=True)
@@ -80,20 +71,12 @@ def evaluate_run(
     policy: QualityPolicy,
 ) -> QualityOutcome:
     """Write this run's contextual findings and report whether any reject."""
-    observed = _load_observed(session, run_id)
-    findings: list[QualityFinding] = _calendar_revision_findings(
-        session, run_id, source, calendar_publication_id, policy
-    )
-
-    if observed:
-        by_date: dict[date, list[_Observed]] = defaultdict(list)
-        for item in observed:
-            by_date[item.trade_date].append(item)
-
-        for trade_date in sorted(by_date):
-            findings.extend(_evaluate_date(run_id, trade_date, by_date[trade_date], calendar, policy))
-        findings.extend(_missing_bars_on_open_days(run_id, sorted(by_date), calendar))
-        findings.extend(_adjustment_consistency(run_id, observed))
+    findings = [
+        *_calendar_revision_findings(session, run_id, source, calendar_publication_id, policy),
+        *_per_date_findings(session, run_id, calendar, policy),
+        *_missing_trading_days(session, run_id, calendar),
+        *_adjustment_findings(session, run_id, policy),
+    ]
 
     for finding in findings:
         session.add(finding)
@@ -104,119 +87,114 @@ def evaluate_run(
     )
 
 
-def _load_observed(session: Session, run_id) -> list[_Observed]:
-    """Every bar this run published, as of its own last observation."""
-    rows = session.execute(
-        select(BarRecord.trade_date, Instrument.source_code, BarVersion)
-        .join(PublicationBarObservation, PublicationBarObservation.bar_record_id == BarRecord.id)
-        .join(BarVersion, BarVersion.id == PublicationBarObservation.bar_version_id)
-        .join(Instrument, Instrument.instrument_id == BarRecord.instrument_id)
+def _observations(run_id) -> Select:
+    """This run's published bars, as a join every rule starts from."""
+    return (
+        select(BarRecord.trade_date)
+        .select_from(PublicationBarObservation)
         .join(
             EndpointPublication,
             EndpointPublication.id == PublicationBarObservation.publication_id,
         )
+        .join(BarRecord, BarRecord.id == PublicationBarObservation.bar_record_id)
+        .join(BarVersion, BarVersion.id == PublicationBarObservation.bar_version_id)
         .where(
             EndpointPublication.sync_run_id == run_id,
             EndpointPublication.status == PublicationStatus.PUBLISHED,
         )
-    ).all()
-
-    return [
-        _Observed(
-            trade_date=trade_date,
-            code=code or "",
-            raw_close=version.raw_close,
-            adjusted_close=version.adjusted_close,
-            raw_volume=version.raw_volume,
-            adjustment_factor=version.adjustment_factor,
-            quality_status=version.quality_status,
-            quality_rules=list(version.quality_rules or ()),
-        )
-        for trade_date, code, version in rows
-    ]
-
-
-def _finding(
-    run_id,
-    rule: QualityRule,
-    trade_date: date,
-    severity: QualitySeverity,
-    affected: list[str],
-    evaluated: int,
-    policy: QualityPolicy,
-) -> QualityFinding:
-    return QualityFinding(
-        sync_run_id=run_id,
-        rule=rule.value,
-        trade_date=trade_date,
-        severity=severity,
-        affected_count=len(affected),
-        evaluated_count=evaluated,
-        sample=sorted(affected)[: policy.finding_sample_limit],
     )
 
 
-def _evaluate_date(
-    run_id,
-    trade_date: date,
-    bars: list[_Observed],
-    calendar: CalendarPort,
-    policy: QualityPolicy,
+def _per_date_findings(
+    session: Session, run_id, calendar: CalendarPort, policy: QualityPolicy
 ) -> list[QualityFinding]:
+    """Impossible prices and silent securities, counted per trade date."""
+    negative = BarVersion.quality_rules.any(QualityRule.NEGATIVE_PRICE.value)
+    silent = BarVersion.raw_volume == 0
+
+    counts = session.execute(
+        _observations(run_id)
+        .add_columns(
+            func.count().label("evaluated"),
+            func.count().filter(negative).label("negative"),
+            func.count().filter(silent).label("silent"),
+        )
+        .group_by(BarRecord.trade_date)
+    ).all()
+
+    flagged_negative = [row.trade_date for row in counts if row.negative]
+    flagged_silent = [row.trade_date for row in counts if row.silent]
+    negative_samples = _samples(session, run_id, negative, flagged_negative, policy)
+    silent_samples = _samples(session, run_id, silent, flagged_silent, policy)
+
     findings: list[QualityFinding] = []
-    evaluated = len(bars)
-
-    # Cannot raise in practice: every date here came from this run's plan,
-    # which is this calendar's own open days. Guarded anyway so a future caller
-    # evaluating a wider set degrades to "not evaluated" rather than crashing.
-    try:
-        is_open = calendar.is_open(trade_date)
-    except CalendarCoverageError:
-        return findings
-
-    if is_open:
-        silent = [item.code for item in bars if item.raw_volume == 0]
-        if silent:
+    for row in counts:
+        if row.negative:
+            ratio = row.negative / row.evaluated if row.evaluated else 0.0
+            # One impossible price is that security's problem. A whole day of
+            # them is a broken feed, and no amount of per-security marking
+            # makes the day usable.
+            severity = (
+                QualitySeverity.REJECTING
+                if ratio > policy.negative_price_escalation_ratio
+                else QualitySeverity.WARNING
+            )
             findings.append(
                 _finding(
-                    run_id,
-                    QualityRule.NO_TRADING_ACTIVITY,
-                    trade_date,
-                    QualitySeverity.WARNING,
-                    silent,
-                    evaluated,
-                    policy,
+                    run_id, QualityRule.NEGATIVE_PRICE, row.trade_date, severity,
+                    row.negative, row.evaluated, negative_samples.get(row.trade_date, []),
                 )
             )
-
-    negative = [item.code for item in bars if QualityRule.NEGATIVE_PRICE.value in item.quality_rules]
-    if negative:
-        ratio = len(negative) / evaluated if evaluated else 0.0
-        # A single impossible price is that security's problem; a whole day of
-        # them is a broken feed, and no amount of per-security marking makes
-        # the day usable.
-        severity = (
-            QualitySeverity.REJECTING
-            if ratio > policy.negative_price_escalation_ratio
-            else QualitySeverity.WARNING
-        )
-        findings.append(
-            _finding(
-                run_id,
-                QualityRule.NEGATIVE_PRICE,
-                trade_date,
-                severity,
-                negative,
-                evaluated,
-                policy,
+        if row.silent and _is_open(calendar, row.trade_date):
+            findings.append(
+                _finding(
+                    run_id, QualityRule.NO_TRADING_ACTIVITY, row.trade_date,
+                    QualitySeverity.WARNING,
+                    row.silent, row.evaluated, silent_samples.get(row.trade_date, []),
+                )
             )
-        )
-
     return findings
 
 
-def _missing_bars_on_open_days(run_id, covered: list[date], calendar: CalendarPort) -> list[QualityFinding]:
+def _samples(
+    session: Session, run_id, condition, dates: list[date], policy: QualityPolicy
+) -> dict[date, list[str]]:
+    """A capped worked example per flagged date, in one pass.
+
+    ROW_NUMBER rather than a query per date: a rule that fires on most days
+    would otherwise mean hundreds of round trips.
+    """
+    if not dates:
+        return {}
+    ranked = (
+        _observations(run_id)
+        .add_columns(
+            Instrument.source_code,
+            func.row_number()
+            .over(partition_by=BarRecord.trade_date, order_by=Instrument.source_code)
+            .label("rank"),
+        )
+        .join(Instrument, Instrument.instrument_id == BarRecord.instrument_id)
+        .where(and_(condition, BarRecord.trade_date.in_(dates)))
+        .subquery()
+    )
+    rows = session.execute(
+        select(ranked.c.trade_date, ranked.c.source_code).where(
+            ranked.c.rank <= policy.finding_sample_limit
+        )
+    ).all()
+
+    samples: dict[date, list[str]] = {}
+    for trade_date, code in rows:
+        samples.setdefault(trade_date, []).append(code)
+    return samples
+
+
+def _missing_trading_days(session: Session, run_id, calendar: CalendarPort) -> list[QualityFinding]:
     """Open days inside this run's own range that produced no bars at all."""
+    covered = sorted(
+        session.scalars(_observations(run_id).distinct()).all()
+    )
     if not covered:
         return []
     try:
@@ -240,12 +218,60 @@ def _missing_bars_on_open_days(run_id, covered: list[date], calendar: CalendarPo
     ]
 
 
+def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> list[QualityFinding]:
+    """The adjusted series must only step where the factor says it does.
+
+    Deliberately formula-agnostic: it asserts that `adjusted/raw` holds steady
+    between consecutive observed dates unless an adjustment factor other than 1
+    appears, which is true of any multiplicative convention. The exact algebra
+    J-Quants uses is not confirmed, so this stays a warning and is kept out of
+    the escalation arithmetic until real data pins the formula down.
+
+    The LAG runs in the database; only the violations — normally none — are
+    returned.
+    """
+    ratio = BarVersion.adjusted_close / func.nullif(BarVersion.raw_close, 0)
+    ratios = (
+        _observations(run_id)
+        .add_columns(
+            Instrument.source_code,
+            ratio.label("ratio"),
+            BarVersion.adjustment_factor.label("factor"),
+            func.lag(ratio)
+            .over(partition_by=BarRecord.instrument_id, order_by=BarRecord.trade_date)
+            .label("previous"),
+        )
+        .join(Instrument, Instrument.instrument_id == BarRecord.instrument_id)
+        .subquery()
+    )
+
+    rows = session.execute(
+        select(
+            ratios.c.trade_date,
+            func.count().label("affected"),
+            func.array_agg(func.distinct(ratios.c.source_code)).label("codes"),
+        )
+        .where(
+            ratios.c.previous.is_not(None),
+            ratios.c.ratio.is_not(None),
+            ratios.c.ratio != ratios.c.previous,
+            (ratios.c.factor.is_(None)) | (ratios.c.factor == 1),
+        )
+        .group_by(ratios.c.trade_date)
+    ).all()
+
+    return [
+        _finding(
+            run_id, QualityRule.ADJUSTMENT_INCONSISTENT, row.trade_date,
+            QualitySeverity.WARNING, row.affected, row.affected,
+            sorted(row.codes)[: policy.finding_sample_limit],
+        )
+        for row in rows
+    ]
+
+
 def _calendar_revision_findings(
-    session: Session,
-    run_id,
-    source: str,
-    current_publication_id,
-    policy: QualityPolicy,
+    session: Session, run_id, source: str, current_publication_id, policy: QualityPolicy
 ) -> list[QualityFinding]:
     """Days this calendar closed that we already hold bars for.
 
@@ -271,17 +297,12 @@ def _calendar_revision_findings(
     for day, was_open in before.items():
         if not was_open or after.get(day) is not False:
             continue
-        codes = _codes_with_bars(session, source, day)
+        codes = _codes_with_bars(session, source, day, policy)
         if codes:
             findings.append(
                 _finding(
-                    run_id,
-                    QualityRule.CALENDAR_DISAGREEMENT,
-                    day,
-                    QualitySeverity.WARNING,
-                    codes,
-                    len(codes),
-                    policy,
+                    run_id, QualityRule.CALENDAR_DISAGREEMENT, day,
+                    QualitySeverity.WARNING, len(codes), len(codes), codes,
                 )
             )
     return findings
@@ -297,55 +318,43 @@ def _calendar_map(session: Session, publication_id) -> dict[date, bool]:
     )
 
 
-def _codes_with_bars(session: Session, source: str, trade_date: date) -> list[str]:
+def _codes_with_bars(session: Session, source: str, trade_date: date, policy: QualityPolicy) -> list[str]:
     return list(
         session.scalars(
             select(Instrument.source_code)
             .join(BarRecord, BarRecord.instrument_id == Instrument.instrument_id)
             .where(BarRecord.source == source, BarRecord.trade_date == trade_date)
+            .order_by(Instrument.source_code)
+            .limit(policy.finding_sample_limit)
         ).all()
     )
 
 
-def _adjustment_consistency(run_id, observed: list[_Observed]) -> list[QualityFinding]:
-    """The adjusted series must only step where the factor says it does.
-
-    Deliberately formula-agnostic: it asserts that `adjusted/raw` holds steady
-    between consecutive observed dates unless an adjustment factor other than 1
-    appears, which is true of any multiplicative convention. The exact algebra
-    J-Quants uses is not confirmed, so this stays a warning and is kept out of
-    the escalation arithmetic until real data pins the formula down.
-    """
-    by_code: dict[str, list[_Observed]] = defaultdict(list)
-    for item in observed:
-        by_code[item.code].append(item)
-
-    findings: list[QualityFinding] = []
-    for code, items in by_code.items():
-        items.sort(key=lambda entry: entry.trade_date)
-        for earlier, later in zip(items, items[1:]):
-            previous = _ratio(earlier)
-            current = _ratio(later)
-            if previous is None or current is None or previous == current:
-                continue
-            factor = later.adjustment_factor
-            if factor is not None and factor != 1:
-                continue
-            findings.append(
-                QualityFinding(
-                    sync_run_id=run_id,
-                    rule=QualityRule.ADJUSTMENT_INCONSISTENT.value,
-                    trade_date=later.trade_date,
-                    severity=QualitySeverity.WARNING,
-                    affected_count=1,
-                    evaluated_count=1,
-                    sample=[code],
-                )
-            )
-    return findings
+def _is_open(calendar: CalendarPort, trade_date: date) -> bool:
+    # Cannot raise in practice: every date here came from this run's plan,
+    # which is this calendar's own open days. Guarded anyway so a future caller
+    # evaluating a wider set degrades to "not evaluated" rather than crashing.
+    try:
+        return calendar.is_open(trade_date)
+    except CalendarCoverageError:
+        return False
 
 
-def _ratio(item: _Observed) -> Decimal | None:
-    if item.raw_close in (None, 0) or item.adjusted_close is None:
-        return None
-    return item.adjusted_close / item.raw_close
+def _finding(
+    run_id,
+    rule: QualityRule,
+    trade_date: date,
+    severity: QualitySeverity,
+    affected: int,
+    evaluated: int,
+    sample: list[str],
+) -> QualityFinding:
+    return QualityFinding(
+        sync_run_id=run_id,
+        rule=rule.value,
+        trade_date=trade_date,
+        severity=severity,
+        affected_count=affected,
+        evaluated_count=evaluated,
+        sample=list(sample),
+    )
