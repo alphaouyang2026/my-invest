@@ -54,8 +54,9 @@ from app.models.market_data import (
     publish_sequence_seq,
 )
 from app.models.task import Task, TaskStatus
-from app.services import snapshot_reader
+from app.services import quality_pass, snapshot_reader
 from app.services.calendar_normalization import MARKET_TSE, CalendarDay, normalize_calendar
+from app.services.calendar_port import DbCalendarPort
 from app.services.quality_rules import QualityPolicy, evaluate_row_local
 from app.services.sync_planner import (
     choose_target_dates,
@@ -805,7 +806,28 @@ class JQuantsSyncWorkflow:
 
         self._check_cancelled(run_id)
         master_snapshot_id = self._ensure_master(run_id)
-        return self._activate_snapshot(run_id, plan, master_snapshot_id)
+        eligible = self._evaluate_quality(run_id, plan)
+        return self._activate_snapshot(run_id, plan, master_snapshot_id, eligible)
+
+    def _evaluate_quality(self, run_id: uuid.UUID, plan: _FrozenPlan) -> bool:
+        """Run the contextual rules and report whether the snapshot is usable.
+
+        Deliberately not wrapped in a try/except. If the evaluator itself
+        breaks, it has produced no verdict at all — neither "the data is fine"
+        nor "the data is bad" — and recording ineligible would be
+        indistinguishable from having checked. Letting the Task fail keeps the
+        two apart, and leaves the previous snapshot as head.
+        """
+        with self._sessions() as session:
+            run = session.get(SyncRun, run_id)
+            run.phase = SyncPhase.EVALUATING_QUALITY
+            session.commit()
+
+        calendar = DbCalendarPort(self._sessions, plan.calendar_publication_id)
+        with self._sessions() as session:
+            outcome = quality_pass.evaluate_run(session, run_id, calendar, self._quality_policy)
+            session.commit()
+        return outcome.is_backtest_eligible
 
     def _complete_without_bars(
         self, run_id: uuid.UUID, plan: _FrozenPlan, mode: SyncMode | None
@@ -918,7 +940,11 @@ class JQuantsSyncWorkflow:
             return snapshot.id
 
     def _activate_snapshot(
-        self, run_id: uuid.UUID, plan: _FrozenPlan, master_snapshot_id: uuid.UUID
+        self,
+        run_id: uuid.UUID,
+        plan: _FrozenPlan,
+        master_snapshot_id: uuid.UUID,
+        is_backtest_eligible: bool = True,
     ) -> SyncOutcome:
         """Create the immutable snapshot, switch the head, and terminate both
         SyncRun and Task — all in one transaction (§9.2)."""
@@ -965,6 +991,8 @@ class JQuantsSyncWorkflow:
                 verified_start=plan.target_dates[0] if plan.target_dates else None,
                 verified_end=plan.target_dates[-1] if plan.target_dates else None,
                 plan_fingerprint=plan.fingerprint,
+                is_backtest_eligible=is_backtest_eligible,
+                version=_next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
@@ -1012,6 +1040,11 @@ class JQuantsSyncWorkflow:
                 verified_start=plan.target_dates[0] if plan.target_dates else None,
                 verified_end=plan.target_dates[-1] if plan.target_dates else None,
                 plan_fingerprint=plan.fingerprint,
+                # Nothing new was published, so this snapshot resolves to
+                # byte-identical bar versions. Re-running the pass would spend
+                # time proving an answer that cannot have changed.
+                is_backtest_eligible=previous.is_backtest_eligible,
+                version=_next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
@@ -1528,6 +1561,18 @@ def _bar_record(
         session.add(record)
         session.flush()
     return record
+
+
+def _next_snapshot_version(session: Session, source: str) -> int:
+    """Next per-source counter, taken under the head lock the caller already holds.
+
+    A Postgres sequence cannot be per-source and would leave gaps on rollback,
+    and a gap in a number shown to a person reads as lost data.
+    """
+    highest = session.scalar(
+        select(func.max(DataSnapshot.version)).where(DataSnapshot.source == source)
+    )
+    return (highest or 0) + 1
 
 
 def _calendar_dates(rows: list[dict[str, Any]]) -> list[date]:

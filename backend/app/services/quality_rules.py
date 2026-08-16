@@ -32,6 +32,13 @@ class QualityRule(str, enum.Enum):
     NEGATIVE_VOLUME = "negative_volume"
     OHLC_OUT_OF_ORDER = "ohlc_out_of_order"
 
+    # Contextual rules — settled by the post-publication pass, never stored on
+    # a BarVersion, because none of them is a function of one row's content.
+    CALENDAR_DISAGREEMENT = "calendar_disagreement"
+    MISSING_TRADING_DAY = "missing_trading_day"
+    NO_TRADING_ACTIVITY = "no_trading_activity"
+    ADJUSTMENT_INCONSISTENT = "adjustment_inconsistent"
+
 
 PRICE_FIELDS = ("raw_open", "raw_high", "raw_low", "raw_close")
 VOLUME_FIELDS = ("raw_volume", "adjusted_volume")
@@ -79,6 +86,15 @@ class QualityPolicy:
 
     critical_fields: frozenset[str] = field(default=CRITICAL_FIELDS)
     optional_fields: frozenset[str] = field(default=OPTIONAL_FIELDS)
+    #: Share of a day's returned bars that must carry an impossible price
+    #: before the day stops being one security's problem and becomes a broken
+    #: feed. Denominator is what the rule actually examined, not the master
+    #: list, so a day where most securities are absent stays sensitive.
+    negative_price_escalation_ratio: float = 0.01
+    #: Findings are aggregated per day; this caps the worked example each one
+    #: carries so an investigation has a place to start without the table
+    #: growing to millions of rows.
+    finding_sample_limit: int = 100
 
 
 def evaluate_row_local(

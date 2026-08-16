@@ -69,6 +69,7 @@ class SyncPhase(str, enum.Enum):
     PLANNING = "planning"
     BARS = "bars"
     MASTER = "master"
+    EVALUATING_QUALITY = "evaluating_quality"
     ACTIVATING_SNAPSHOT = "activating_snapshot"
     COMPLETE = "complete"
 
@@ -475,6 +476,49 @@ class CurrentBar(Base):
     )
 
 
+class QualitySeverity(str, enum.Enum):
+    #: Recorded and queryable, but never affects whether a snapshot is usable.
+    WARNING = "warning"
+    #: Enough to make the run's snapshot ineligible for backtesting.
+    REJECTING = "rejecting"
+
+
+class QualityFinding(Base):
+    """One rule's verdict for one trade date within one run.
+
+    Anchored to the run, not the snapshot: the contextual pass runs before the
+    snapshot exists, and `DataSnapshot.sync_run_id` is unique, so the run id is
+    a faithful stand-in. It also means a run that fails before reaching
+    snapshot activation still leaves its reasons behind.
+
+    Aggregated per date because that is the grain the escalation threshold is
+    computed at, and because per-instrument rows would run to millions over two
+    years. `sample` keeps a capped list so an investigation has somewhere to
+    start; the row-local detail stays recoverable from `bar_versions`.
+    """
+
+    __tablename__ = "quality_findings"
+    __table_args__ = (
+        UniqueConstraint("sync_run_id", "rule", "trade_date", name="uq_quality_finding"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sync_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sync_runs.id"), nullable=False, index=True
+    )
+    rule: Mapped[str] = mapped_column(String(40), nullable=False)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    severity: Mapped[QualitySeverity] = mapped_column(
+        pg_enum(QualitySeverity, "quality_severity"), nullable=False
+    )
+    affected_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: The population the rule actually examined — the denominator behind any
+    #: escalation, kept so the decision can be re-checked rather than trusted.
+    evaluated_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sample: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DataSnapshot(Base):
     """Immutable research view created only when a whole run succeeds.
 
@@ -502,6 +546,14 @@ class DataSnapshot(Base):
     verified_start: Mapped[date | None] = mapped_column(Date)
     verified_end: Mapped[date | None] = mapped_column(Date)
     plan_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Decided once, at creation, and never revisited. A snapshot a backtest
+    #: has already bound to must not have its verdict overturned by a later
+    #: rule change, and a run that produced no rejecting finding was clean at
+    #: the moment it was judged — which is the only moment that can be judged.
+    is_backtest_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: A counter for humans, per source. Deliberately not the global publish
+    #: sequence: gaps in that one would read as missing data.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -19,6 +19,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.services.jquants_sync_workflow import JQuantsSyncWorkflow, SyncPolicy
+from app.services.quality_rules import QualityPolicy
 
 
 def _test_database_url() -> str | URL:
@@ -106,11 +107,18 @@ def make_workflow(session_factory):
     """Build a workflow around a scripted adapter, with the batch size the
     test cares about."""
 
-    def _make(adapter, *, batch_size: int = 5, source: str = "jquants") -> JQuantsSyncWorkflow:
+    def _make(
+        adapter,
+        *,
+        batch_size: int = 5,
+        source: str = "jquants",
+        quality_policy: QualityPolicy = QualityPolicy(),
+    ) -> JQuantsSyncWorkflow:
         return JQuantsSyncWorkflow(
             session_factory,
             adapter,
             policy=SyncPolicy(batch_size=batch_size),
+            quality_policy=quality_policy,
             source=source,
         )
 
