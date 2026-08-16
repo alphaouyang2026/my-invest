@@ -47,6 +47,30 @@ def test_the_detail_view_carries_the_reasons_a_snapshot_was_rejected(client, syn
     assert rejecting[0]["sample"] == ["13010"]
 
 
+def test_a_revalidated_snapshot_carries_its_own_findings_and_says_where_it_came_from(
+    client, sync_workflow, revalidation_workflow
+):
+    """Two snapshots with identical coverage are otherwise indistinguishable,
+    and each must answer with the verdict its own evaluation reached."""
+
+    def bars(trade_date: date) -> list[dict]:
+        return [bar_row("13010", trade_date, close=-5), bar_row("13020", trade_date)]
+
+    _sync(sync_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
+    revalidation_workflow.execute(revalidation_workflow.start().id)
+
+    listed = client.get("/api/v1/snapshots").json()
+    latest = [item for item in listed if item["is_current"]][0]
+    detail = client.get(f"/api/v1/snapshots/{latest['id']}").json()
+
+    assert [item["evaluation_kind"] for item in listed] == ["revalidate", "sync"]
+    assert latest["sync_run_id"] is None
+    assert detail["is_backtest_eligible"] is False
+    rejecting = [item for item in detail["findings"] if item["severity"] == "rejecting"]
+    assert {item["rule"] for item in rejecting} == {"negative_price"}
+    assert {item["trade_date"] for item in rejecting} == {day.isoformat() for day in OPEN_DAYS}
+
+
 def test_an_unknown_snapshot_is_a_404(client):
     response = client.get("/api/v1/snapshots/00000000-0000-0000-0000-000000000000")
 

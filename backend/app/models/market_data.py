@@ -483,13 +483,81 @@ class QualitySeverity(str, enum.Enum):
     REJECTING = "rejecting"
 
 
-class QualityFinding(Base):
-    """One rule's verdict for one trade date within one run.
+class QualityEvaluationKind(str, enum.Enum):
+    #: Ran as the final phase of a sync, over what that run published.
+    SYNC = "sync"
+    #: Ran on demand over the head snapshot, with today's rules.
+    REVALIDATE = "revalidate"
 
-    Anchored to the run, not the snapshot: the contextual pass runs before the
-    snapshot exists, and `DataSnapshot.sync_run_id` is unique, so the run id is
-    a faithful stand-in. It also means a run that fails before reaching
-    snapshot activation still leaves its reasons behind.
+
+class QualityEvaluationStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+#: A source may carry one of these at a time — a sync and a re-validation must
+#: never be in flight together, since each changes what the other is judging.
+ACTIVE_EVALUATION_STATUSES = frozenset(
+    {QualityEvaluationStatus.QUEUED, QualityEvaluationStatus.RUNNING}
+)
+
+
+class QualityEvaluation(Base):
+    """One pass of the contextual rules over one population of bars.
+
+    Findings hang off this rather than off a sync run, because a re-validation
+    has no run to hang them from and reusing the original run's id would
+    collide with the findings that run already wrote. Both producers make *an
+    evaluation*; the difference between them is `kind` and what `scope` the
+    pass was given.
+
+    Anchoring here rather than on the snapshot keeps the property 04 was
+    careful about: an evaluation that never reached snapshot activation still
+    leaves its reasons behind, with `produced_snapshot_id` left NULL.
+
+    For a re-validation this row is also the progress record — there is no
+    second state machine, because there are no phases to record: it is one set
+    of aggregate queries, with none of the calendar/batch/paging/rate-limit
+    machinery that makes `SyncRun` complicated.
+    """
+
+    __tablename__ = "quality_evaluation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[QualityEvaluationKind] = mapped_column(
+        pg_enum(QualityEvaluationKind, "quality_evaluation_kind"), nullable=False
+    )
+    #: Which market data source was judged. Derivable from `sync_run_id` for a
+    #: sync, but a re-validation has none, and every other table that describes
+    #: a body of market data carries it.
+    source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    sync_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sync_runs.id"), index=True)
+    #: Set only for a re-validation, which is queued work of its own. A sync's
+    #: task is reachable through its run.
+    task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id"), unique=True)
+    produced_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_snapshots.id"), unique=True
+    )
+    #: The `QualityPolicy` this pass ran under. Today production never injects
+    #: one, so the code version says everything; from ticket 14 on, thresholds
+    #: become user-editable and the same code will produce different verdicts.
+    #: Recorded now because it costs one column, and because an evaluation
+    #: written before that lands can never have its thresholds reconstructed.
+    #: NULL means "written before evaluations recorded this".
+    policy: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[QualityEvaluationStatus] = mapped_column(
+        pg_enum(QualityEvaluationStatus, "quality_evaluation_status"),
+        default=QualityEvaluationStatus.QUEUED,
+        nullable=False,
+    )
+    error_summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class QualityFinding(Base):
+    """One rule's verdict for one trade date within one evaluation.
 
     Aggregated per date because that is the grain the escalation threshold is
     computed at, and because per-instrument rows would run to millions over two
@@ -499,12 +567,12 @@ class QualityFinding(Base):
 
     __tablename__ = "quality_findings"
     __table_args__ = (
-        UniqueConstraint("sync_run_id", "rule", "trade_date", name="uq_quality_finding"),
+        UniqueConstraint("evaluation_id", "rule", "trade_date", name="uq_quality_finding"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sync_run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("sync_runs.id"), nullable=False, index=True
+    evaluation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("quality_evaluation.id"), nullable=False, index=True
     )
     rule: Mapped[str] = mapped_column(String(40), nullable=False)
     trade_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -532,8 +600,15 @@ class DataSnapshot(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
-    sync_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sync_runs.id"), nullable=False)
-    mode: Mapped[SyncMode] = mapped_column(pg_enum(SyncMode, "sync_mode"), nullable=False)
+    #: NULL for a snapshot produced by a re-validation: it fetched nothing, so
+    #: claiming a run would be a lie, and the unique constraint would reject a
+    #: borrowed one anyway. `QualityEvaluation.produced_snapshot_id` is how
+    #: such a snapshot is traced back to what made it.
+    sync_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sync_runs.id"))
+    #: NULL for the same reason, and not merely for tidiness: `mode` is what
+    #: `_snapshot_watermarks` reads to decide when the next full reconcile is
+    #: due, so inheriting `initial` here would quietly postpone it.
+    mode: Mapped[SyncMode | None] = mapped_column(pg_enum(SyncMode, "sync_mode"))
     bar_publish_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     calendar_publication_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("endpoint_publications.id"), nullable=False

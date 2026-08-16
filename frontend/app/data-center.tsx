@@ -64,10 +64,31 @@ type Snapshot = {
   coverage_end?: string | null
   verified_start?: string | null
   verified_end?: string | null
+  evaluation_kind?: 'sync' | 'revalidate' | null
   is_backtest_eligible: boolean
   is_current: boolean
   created_at?: string
 }
+
+/**
+ * A re-validation re-judges the newest data with today's rules. It always acts
+ * on the head — there is no snapshot to choose — so it belongs beside the
+ * section heading rather than on any one row.
+ */
+type Evaluation = {
+  id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  error_summary?: string | null
+}
+
+const EVALUATION_LABELS: Record<string, string> = {
+  queued: '重新校验排队中',
+  running: '正在重新校验',
+  succeeded: '重新校验已完成',
+  failed: '重新校验失败',
+}
+
+const EVALUATION_RUNNING = new Set(['queued', 'running'])
 
 type Finding = {
   rule: string
@@ -107,6 +128,7 @@ export default function DataCenter() {
   const [active, setActive] = useState<SyncRun | null>(null)
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [detail, setDetail] = useState<SnapshotDetail | null>(null)
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -114,9 +136,11 @@ export default function DataCenter() {
       const status = await jsonFetch<SourceStatus>('/data-sync/status')
       const history = await jsonFetch<SyncRun[]>('/data-sync/runs')
       const stored = await jsonFetch<Snapshot[]>('/snapshots')
+      const latest = await jsonFetch<Evaluation | null>('/quality/revalidations/latest')
       setSource(status)
       setRuns(history)
       setSnapshots(stored)
+      setEvaluation(latest)
       setActive(history.find((run) => !terminal.has(run.status)) ?? null)
       setError(null)
     } catch (cause) {
@@ -128,11 +152,14 @@ export default function DataCenter() {
     const id = window.setTimeout(() => void refresh(), 0)
     return () => window.clearTimeout(id)
   }, [refresh])
+  // A re-validation is background work with no run card of its own, so it has
+  // to keep the same poll alive or its result would only appear on reload.
+  const revalidating = EVALUATION_RUNNING.has(evaluation?.status ?? '')
   useEffect(() => {
-    if (!active) return
+    if (!active && !revalidating) return
     const id = window.setInterval(() => void refresh(), 3000)
     return () => window.clearInterval(id)
-  }, [active, refresh])
+  }, [active, revalidating, refresh])
 
   async function command(path: string, failure: string) {
     try {
@@ -146,6 +173,17 @@ export default function DataCenter() {
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : failure)
+    }
+  }
+
+  async function revalidate() {
+    try {
+      setEvaluation(await jsonFetch<Evaluation>('/quality/revalidations', { method: 'POST' }))
+      setError(null)
+    } catch (cause) {
+      // A refusal names what is holding the source, which is the only useful
+      // thing to say here.
+      setError(cause instanceof Error ? cause.message : '无法开始重新校验')
     }
   }
 
@@ -246,7 +284,26 @@ export default function DataCenter() {
       ) : <p className="empty">尚无同步运行。配置密钥后可开始首次回填。</p>}
 
       {snapshots.length > 0 && <div className="snapshots">
-        <h3>数据快照</h3>
+        {/* Re-validation always acts on the newest data, so it is one action
+            for the whole section rather than a button per row. */}
+        <div className="snapshots-heading">
+          <h3>数据快照</h3>
+          <div className="snapshots-actions">
+            {evaluation?.status && (
+              <span className={`evaluation evaluation-${evaluation.status}`}>
+                {EVALUATION_LABELS[evaluation.status] ?? evaluation.status}
+              </span>
+            )}
+            <button
+              className="secondary"
+              disabled={Boolean(active) || revalidating}
+              onClick={() => void revalidate()}
+            >重新校验</button>
+          </div>
+        </div>
+        {evaluation?.status === 'failed' && evaluation.error_summary && (
+          <p className="error">{evaluation.error_summary}</p>
+        )}
         {snapshots.slice(0, 8).map((snapshot) => (
           <div key={snapshot.id}>
             <button
@@ -260,12 +317,17 @@ export default function DataCenter() {
               <span className={snapshot.is_backtest_eligible ? 'eligible' : 'ineligible'}>
                 {snapshot.is_backtest_eligible ? '可用于回测' : '不可用于回测'}
               </span>
+              {/* Otherwise a version that appeared without any data being
+                  fetched has nothing explaining where it came from. */}
+              {snapshot.evaluation_kind === 'revalidate' && <span className="origin">重新校验</span>}
               {snapshot.is_current && <span className="current">当前</span>}
             </button>
             {detail?.id === snapshot.id && (
               <div className="snapshot-detail">
                 <p className="endpoint">
-                  本次核对范围 {detail.verified_start ?? '—'} → {detail.verified_end ?? '—'}
+                  {detail.evaluation_kind === 'revalidate'
+                    ? '重新校验：未向数据源取数，沿用上一份快照的数据与覆盖范围'
+                    : `本次核对范围 ${detail.verified_start ?? '—'} → ${detail.verified_end ?? '—'}`}
                 </p>
                 {detail.findings.length === 0 ? (
                   <p className="empty">质量检查未发现问题。</p>

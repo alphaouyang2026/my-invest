@@ -14,6 +14,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Any
 
 from app.models.market_data import BarQualityStatus
 
@@ -22,6 +23,7 @@ __all__ = [
     "QualityPolicy",
     "QualityRule",
     "evaluate_row_local",
+    "policy_snapshot",
 ]
 
 
@@ -105,6 +107,23 @@ class QualityPolicy:
     #: Measured against real data — an exact comparison reported 46,756
     #: violations across 485 days, where roughly 500 corporate actions exist.
     adjustment_tolerance_yen: Decimal = Decimal("0.15")
+
+
+def policy_snapshot(policy: QualityPolicy) -> dict[str, Any]:
+    """The thresholds an evaluation ran under, as JSON.
+
+    Written field by field rather than through `asdict`: the frozensets and the
+    `Decimal` have no JSON form, and letting the serialiser pick one would make
+    the recorded value depend on which driver wrote it.
+    """
+    return {
+        "critical_fields": sorted(policy.critical_fields),
+        "optional_fields": sorted(policy.optional_fields),
+        "negative_price_escalation_ratio": policy.negative_price_escalation_ratio,
+        "finding_sample_limit": policy.finding_sample_limit,
+        # A string, so the exact decimal survives the JSON float round trip.
+        "adjustment_tolerance_yen": str(policy.adjustment_tolerance_yen),
+    }
 
 
 def evaluate_row_local(

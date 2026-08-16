@@ -2,9 +2,14 @@
 
 Rules here need something beyond one row — a calendar, a neighbouring date, or
 the day's whole peer group — so they cannot be settled when a `BarVersion` is
-inserted. They run once, after every batch has published and before the
-snapshot is activated, and write aggregated findings rather than touching the
-immutable version rows.
+inserted. They run once per *evaluation* and write aggregated findings rather
+than touching the immutable version rows.
+
+An evaluation names the population it judged. A sync judges what that run
+published, before its snapshot exists; a re-validation judges everything the
+head snapshot resolves to, with today's rules. `Scope` is the one thing that
+differs between them — every rule below is written against it, so neither
+producer has a copy of the other's logic.
 
 Every rule aggregates in SQL. The first version of this module loaded each
 observed bar into Python and counted there, which is fine for the thousand rows
@@ -24,6 +29,7 @@ defect, and a check that cries wolf teaches people to ignore findings.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import date
 
@@ -34,7 +40,6 @@ from app.models.market_data import (
     BarRecord,
     BarVersion,
     DataSnapshot,
-    DataSnapshotHead,
     EndpointPublication,
     Instrument,
     PublicationBarObservation,
@@ -43,8 +48,37 @@ from app.models.market_data import (
     QualitySeverity,
     TradingCalendar,
 )
+from app.services import snapshot_reader
 from app.services.calendar_port import CalendarCoverageError, CalendarPort
 from app.services.quality_rules import QualityPolicy, QualityRule
+
+
+@dataclass(frozen=True)
+class RunScope:
+    """The bars one sync run published.
+
+    Narrower than the snapshot that run goes on to create: a sync re-checks a
+    window, and judging the untouched years behind it would re-report the same
+    findings on every incremental.
+    """
+
+    run_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class SnapshotScope:
+    """Everything a snapshot resolves to.
+
+    What a re-validation judges, because "does today's rule set still accept
+    the data we hold" is a question about the whole readable history, not about
+    whichever window was fetched last.
+    """
+
+    source: str
+    bar_publish_sequence: int
+
+
+Scope = RunScope | SnapshotScope
 
 
 @dataclass(frozen=True)
@@ -62,20 +96,24 @@ class QualityOutcome:
         return self.rejecting == 0
 
 
-def evaluate_run(
+def evaluate(
     session: Session,
-    run_id,
+    *,
+    evaluation_id: uuid.UUID,
+    scope: Scope,
     source: str,
     calendar: CalendarPort,
     calendar_publication_id,
     policy: QualityPolicy,
 ) -> QualityOutcome:
-    """Write this run's contextual findings and report whether any reject."""
+    """Write this evaluation's contextual findings and report whether any reject."""
     findings = [
-        *_calendar_revision_findings(session, run_id, source, calendar_publication_id, policy),
-        *_per_date_findings(session, run_id, calendar, policy),
-        *_missing_trading_days(session, run_id, calendar),
-        *_adjustment_findings(session, run_id, policy),
+        *_calendar_revision_findings(
+            session, evaluation_id, source, calendar_publication_id, policy
+        ),
+        *_per_date_findings(session, evaluation_id, scope, calendar, policy),
+        *_missing_trading_days(session, evaluation_id, scope, calendar),
+        *_adjustment_findings(session, evaluation_id, scope, policy),
     ]
 
     for finding in findings:
@@ -87,26 +125,49 @@ def evaluate_run(
     )
 
 
-def _observations(run_id) -> Select:
-    """This run's published bars, as a join every rule starts from."""
+def _observations(scope: Scope) -> Select:
+    """The bars this evaluation judges, as a join every rule starts from.
+
+    Both branches expose the same entities — `BarRecord`, `BarVersion`, and a
+    joinable `instrument_id` — so a rule never has to know which scope it is
+    running under.
+    """
+    if isinstance(scope, RunScope):
+        return (
+            select(BarRecord.trade_date)
+            .select_from(PublicationBarObservation)
+            .join(
+                EndpointPublication,
+                EndpointPublication.id == PublicationBarObservation.publication_id,
+            )
+            .join(BarRecord, BarRecord.id == PublicationBarObservation.bar_record_id)
+            .join(BarVersion, BarVersion.id == PublicationBarObservation.bar_version_id)
+            .where(
+                EndpointPublication.sync_run_id == scope.run_id,
+                EndpointPublication.status == PublicationStatus.PUBLISHED,
+            )
+        )
+
+    # Resolved through snapshot_reader rather than by re-deriving "highest
+    # published sequence at or below the cutoff" here: that rule has exactly
+    # one home (§9.1), and a second copy of it would be free to drift.
+    members = snapshot_reader.snapshot_member_query(
+        scope.source, scope.bar_publish_sequence
+    ).subquery()
     return (
         select(BarRecord.trade_date)
-        .select_from(PublicationBarObservation)
-        .join(
-            EndpointPublication,
-            EndpointPublication.id == PublicationBarObservation.publication_id,
-        )
-        .join(BarRecord, BarRecord.id == PublicationBarObservation.bar_record_id)
-        .join(BarVersion, BarVersion.id == PublicationBarObservation.bar_version_id)
-        .where(
-            EndpointPublication.sync_run_id == run_id,
-            EndpointPublication.status == PublicationStatus.PUBLISHED,
-        )
+        .select_from(members)
+        .join(BarRecord, BarRecord.id == members.c.bar_record_id)
+        .join(BarVersion, BarVersion.id == members.c.bar_version_id)
     )
 
 
 def _per_date_findings(
-    session: Session, run_id, calendar: CalendarPort, policy: QualityPolicy
+    session: Session,
+    evaluation_id: uuid.UUID,
+    scope: Scope,
+    calendar: CalendarPort,
+    policy: QualityPolicy,
 ) -> list[QualityFinding]:
     """Impossible prices and silent securities, counted per trade date."""
     negative = BarVersion.quality_rules.any(QualityRule.NEGATIVE_PRICE.value)
@@ -118,7 +179,7 @@ def _per_date_findings(
     silent = BarVersion.raw_volume.is_(None)
 
     counts = session.execute(
-        _observations(run_id)
+        _observations(scope)
         .add_columns(
             func.count().label("evaluated"),
             func.count().filter(negative).label("negative"),
@@ -129,8 +190,8 @@ def _per_date_findings(
 
     flagged_negative = [row.trade_date for row in counts if row.negative]
     flagged_silent = [row.trade_date for row in counts if row.silent]
-    negative_samples = _samples(session, run_id, negative, flagged_negative, policy)
-    silent_samples = _samples(session, run_id, silent, flagged_silent, policy)
+    negative_samples = _samples(session, scope, negative, flagged_negative, policy)
+    silent_samples = _samples(session, scope, silent, flagged_silent, policy)
 
     findings: list[QualityFinding] = []
     for row in counts:
@@ -146,14 +207,14 @@ def _per_date_findings(
             )
             findings.append(
                 _finding(
-                    run_id, QualityRule.NEGATIVE_PRICE, row.trade_date, severity,
+                    evaluation_id, QualityRule.NEGATIVE_PRICE, row.trade_date, severity,
                     row.negative, row.evaluated, negative_samples.get(row.trade_date, []),
                 )
             )
         if row.silent and _is_open(calendar, row.trade_date):
             findings.append(
                 _finding(
-                    run_id, QualityRule.NO_TRADING_ACTIVITY, row.trade_date,
+                    evaluation_id, QualityRule.NO_TRADING_ACTIVITY, row.trade_date,
                     QualitySeverity.WARNING,
                     row.silent, row.evaluated, silent_samples.get(row.trade_date, []),
                 )
@@ -162,7 +223,7 @@ def _per_date_findings(
 
 
 def _samples(
-    session: Session, run_id, condition, dates: list[date], policy: QualityPolicy
+    session: Session, scope: Scope, condition, dates: list[date], policy: QualityPolicy
 ) -> dict[date, list[str]]:
     """A capped worked example per flagged date, in one pass.
 
@@ -172,7 +233,7 @@ def _samples(
     if not dates:
         return {}
     ranked = (
-        _observations(run_id)
+        _observations(scope)
         .add_columns(
             Instrument.source_code,
             func.row_number()
@@ -195,11 +256,11 @@ def _samples(
     return samples
 
 
-def _missing_trading_days(session: Session, run_id, calendar: CalendarPort) -> list[QualityFinding]:
-    """Open days inside this run's own range that produced no bars at all."""
-    covered = sorted(
-        session.scalars(_observations(run_id).distinct()).all()
-    )
+def _missing_trading_days(
+    session: Session, evaluation_id: uuid.UUID, scope: Scope, calendar: CalendarPort
+) -> list[QualityFinding]:
+    """Open days inside this evaluation's own range that produced no bars at all."""
+    covered = sorted(session.scalars(_observations(scope).distinct()).all())
     if not covered:
         return []
     try:
@@ -210,7 +271,7 @@ def _missing_trading_days(session: Session, run_id, calendar: CalendarPort) -> l
     present = set(covered)
     return [
         QualityFinding(
-            sync_run_id=run_id,
+            evaluation_id=evaluation_id,
             rule=QualityRule.MISSING_TRADING_DAY.value,
             trade_date=day,
             severity=QualitySeverity.WARNING,
@@ -223,7 +284,9 @@ def _missing_trading_days(session: Session, run_id, calendar: CalendarPort) -> l
     ]
 
 
-def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> list[QualityFinding]:
+def _adjustment_findings(
+    session: Session, evaluation_id: uuid.UUID, scope: Scope, policy: QualityPolicy
+) -> list[QualityFinding]:
     """The adjusted series must only step where the factor says it does.
 
     Real data settled the formula this once guessed at: `adjusted_close` is
@@ -240,7 +303,7 @@ def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> lis
     """
     ratio = BarVersion.adjusted_close / func.nullif(BarVersion.raw_close, 0)
     ratios = (
-        _observations(run_id)
+        _observations(scope)
         .add_columns(
             Instrument.source_code,
             BarVersion.raw_close.label("raw_close"),
@@ -272,7 +335,7 @@ def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> lis
 
     return [
         _finding(
-            run_id, QualityRule.ADJUSTMENT_INCONSISTENT, row.trade_date,
+            evaluation_id, QualityRule.ADJUSTMENT_INCONSISTENT, row.trade_date,
             QualitySeverity.WARNING, row.affected, row.affected,
             sorted(row.codes)[: policy.finding_sample_limit],
         )
@@ -281,26 +344,35 @@ def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> lis
 
 
 def _calendar_revision_findings(
-    session: Session, run_id, source: str, current_publication_id, policy: QualityPolicy
+    session: Session,
+    evaluation_id: uuid.UUID,
+    source: str,
+    current_publication_id,
+    policy: QualityPolicy,
 ) -> list[QualityFinding]:
     """Days this calendar closed that we already hold bars for.
 
-    Within a single run the calendar and the bars cannot disagree — every date
-    fetched came from this calendar's own open days. The disagreement only
-    becomes possible across a revision, when the annual republication closes a
-    day the stored data already covers. Diffing against the previous snapshot's
-    calendar is therefore both the cheapest and the only meaningful check: the
-    diff is usually empty, and a full re-scan would re-report the same days on
-    every sync.
+    Within a single publication the calendar and the bars cannot disagree —
+    every date fetched came from that calendar's own open days. The
+    disagreement only becomes possible across a revision, when the annual
+    republication closes a day the stored data already covers. Diffing against
+    the calendar in force before this one is therefore both the cheapest and
+    the only meaningful check: the diff is usually empty, and a full re-scan
+    would re-report the same days on every sync.
+
+    Scope-independent on purpose. A re-validation judges the head snapshot's
+    own calendar, so "the one before" is the last snapshot built on a
+    *different* calendar — which is the same pair the sync that produced the
+    head compared, and therefore the same verdict rather than a silently
+    emptied one.
     """
-    head = session.get(DataSnapshotHead, source)
-    if head is None:
-        return []
-    previous = session.get(DataSnapshot, head.snapshot_id)
-    if previous is None or previous.calendar_publication_id == current_publication_id:
+    previous_publication_id = _previous_calendar_publication(
+        session, source, current_publication_id
+    )
+    if previous_publication_id is None:
         return []
 
-    before = _calendar_map(session, previous.calendar_publication_id)
+    before = _calendar_map(session, previous_publication_id)
     after = _calendar_map(session, current_publication_id)
 
     findings = []
@@ -311,11 +383,29 @@ def _calendar_revision_findings(
         if codes:
             findings.append(
                 _finding(
-                    run_id, QualityRule.CALENDAR_DISAGREEMENT, day,
+                    evaluation_id, QualityRule.CALENDAR_DISAGREEMENT, day,
                     QualitySeverity.WARNING, len(codes), len(codes), codes,
                 )
             )
     return findings
+
+
+def _previous_calendar_publication(session: Session, source: str, current_publication_id):
+    """The most recent snapshot calendar that differs from the one being judged.
+
+    Ordered by version rather than read off the head pointer so it holds for a
+    re-validation too: the head *is* the snapshot under evaluation there, and
+    the `!=` is what steps past it without needing to know that.
+    """
+    return session.scalar(
+        select(DataSnapshot.calendar_publication_id)
+        .where(
+            DataSnapshot.source == source,
+            DataSnapshot.calendar_publication_id != current_publication_id,
+        )
+        .order_by(DataSnapshot.version.desc())
+        .limit(1)
+    )
 
 
 def _calendar_map(session: Session, publication_id) -> dict[date, bool]:
@@ -341,9 +431,10 @@ def _codes_with_bars(session: Session, source: str, trade_date: date, policy: Qu
 
 
 def _is_open(calendar: CalendarPort, trade_date: date) -> bool:
-    # Cannot raise in practice: every date here came from this run's plan,
-    # which is this calendar's own open days. Guarded anyway so a future caller
-    # evaluating a wider set degrades to "not evaluated" rather than crashing.
+    # Cannot raise for a sync: every date there came from the run's plan, which
+    # is this calendar's own open days. A re-validation reaches wider — a
+    # snapshot can hold dates outside the calendar it was built with — so this
+    # degrades to "not evaluated" rather than crashing.
     try:
         return calendar.is_open(trade_date)
     except CalendarCoverageError:
@@ -351,7 +442,7 @@ def _is_open(calendar: CalendarPort, trade_date: date) -> bool:
 
 
 def _finding(
-    run_id,
+    evaluation_id: uuid.UUID,
     rule: QualityRule,
     trade_date: date,
     severity: QualitySeverity,
@@ -360,7 +451,7 @@ def _finding(
     sample: list[str],
 ) -> QualityFinding:
     return QualityFinding(
-        sync_run_id=run_id,
+        evaluation_id=evaluation_id,
         rule=rule.value,
         trade_date=trade_date,
         severity=severity,

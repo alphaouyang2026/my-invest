@@ -14,11 +14,13 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.data_sync import get_sync_workflow
+from app.api.quality import get_revalidation_workflow
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.services.jquants_sync_workflow import JQuantsSyncWorkflow, SyncPolicy
+from app.services.quality_revalidation import QualityRevalidationWorkflow
 from app.services.quality_rules import QualityPolicy
 
 
@@ -126,14 +128,40 @@ def make_workflow(session_factory):
 
 
 @pytest.fixture
-def client(db_session: Session, sync_workflow: JQuantsSyncWorkflow):
+def revalidation_workflow(session_factory) -> QualityRevalidationWorkflow:
+    return QualityRevalidationWorkflow(session_factory)
+
+
+@pytest.fixture
+def make_revalidation(session_factory):
+    """A re-validation workflow with the rules the test wants to judge under —
+    the whole point of the feature is that they can differ from last time."""
+
+    def _make(
+        *, quality_policy: QualityPolicy = QualityPolicy(), source: str = "jquants"
+    ) -> QualityRevalidationWorkflow:
+        return QualityRevalidationWorkflow(
+            session_factory, quality_policy=quality_policy, source=source
+        )
+
+    return _make
+
+
+@pytest.fixture
+def client(
+    db_session: Session,
+    sync_workflow: JQuantsSyncWorkflow,
+    revalidation_workflow: QualityRevalidationWorkflow,
+):
     def _get_db_override():
         yield db_session
 
     app.dependency_overrides[get_db] = _get_db_override
     app.dependency_overrides[get_sync_workflow] = lambda: sync_workflow
+    app.dependency_overrides[get_revalidation_workflow] = lambda: revalidation_workflow
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_sync_workflow, None)
+        app.dependency_overrides.pop(get_revalidation_workflow, None)

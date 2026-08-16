@@ -41,6 +41,9 @@ from app.models.market_data import (
     InstrumentMasterSnapshotMember,
     PublicationBarObservation,
     PublicationStatus,
+    QualityEvaluation,
+    QualityEvaluationKind,
+    QualityEvaluationStatus,
     RawSourcePage,
     SyncBatch,
     SyncBatchStatus,
@@ -54,10 +57,10 @@ from app.models.market_data import (
     publish_sequence_seq,
 )
 from app.models.task import Task, TaskStatus
-from app.services import quality_pass, snapshot_reader
+from app.services import quality_pass, snapshot_reader, source_state
 from app.services.calendar_normalization import MARKET_TSE, CalendarDay, normalize_calendar
 from app.services.calendar_port import DbCalendarPort
-from app.services.quality_rules import QualityPolicy, evaluate_row_local
+from app.services.quality_rules import QualityPolicy, evaluate_row_local, policy_snapshot
 from app.services.sync_planner import (
     choose_target_dates,
     chunk_target_dates,
@@ -224,10 +227,13 @@ class JQuantsSyncWorkflow:
         """Create the one-to-one SyncRun + Task under the source lock.
 
         Returns the existing run when one is already active or when the same
-        idempotency key was used before — never a second active run.
+        idempotency key was used before — never a second active run. Refuses
+        outright while a re-validation holds the source: that is the other half
+        of the exclusion re-validation asks for, and queueing behind it would
+        leave two things claiming the source at once.
         """
         with self._sessions() as session:
-            _lock_source(session, self._source)
+            source_state.lock_source(session, self._source)
 
             if idempotency_key:
                 existing = session.scalar(
@@ -239,16 +245,15 @@ class JQuantsSyncWorkflow:
                 if existing:
                     return self._view(session, existing)
 
-            active = session.scalar(
-                select(SyncRun).where(
-                    SyncRun.source == self._source,
-                    SyncRun.status.in_(
-                        [SyncRunStatus.QUEUED, SyncRunStatus.RUNNING, SyncRunStatus.CANCELLING]
-                    ),
-                )
-            )
+            active = source_state.active_sync_run(session, self._source)
             if active:
                 return self._view(session, active)
+
+            if source_state.active_revalidation(session, self._source) is not None:
+                raise SyncConflict(
+                    "A re-validation is running for this source; sync is unavailable "
+                    "until it finishes"
+                )
 
             task = Task(task_type="jquants_sync", payload={}, progress={})
             session.add(task)
@@ -295,7 +300,7 @@ class JQuantsSyncWorkflow:
     def resume(self, run_id: uuid.UUID) -> SyncRunView:
         """Re-queue the *same* Task against the persisted checkpoint (§13.3)."""
         with self._sessions() as session:
-            _lock_source(session, self._source)
+            source_state.lock_source(session, self._source)
             run, task = _lock_run_and_task(session, run_id)
 
             if task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
@@ -335,7 +340,7 @@ class JQuantsSyncWorkflow:
         a number on top of that would only build the dead end again.
         """
         with self._sessions() as session:
-            _lock_source(session, self._source)
+            source_state.lock_source(session, self._source)
             run, task = _lock_run_and_task(session, run_id)
 
             if task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
@@ -849,35 +854,64 @@ class JQuantsSyncWorkflow:
 
         self._check_cancelled(run_id)
         master_snapshot_id = self._ensure_master(run_id)
-        eligible = self._evaluate_quality(run_id, plan)
-        return self._activate_snapshot(run_id, plan, master_snapshot_id, eligible)
+        evaluation = self._evaluate_quality(run_id, plan)
+        return self._activate_snapshot(run_id, plan, master_snapshot_id, evaluation)
 
-    def _evaluate_quality(self, run_id: uuid.UUID, plan: _FrozenPlan) -> bool:
+    def _evaluate_quality(self, run_id: uuid.UUID, plan: _FrozenPlan) -> _Evaluation:
         """Run the contextual rules and report whether the snapshot is usable.
 
-        Deliberately not wrapped in a try/except. If the evaluator itself
-        breaks, it has produced no verdict at all — neither "the data is fine"
-        nor "the data is bad" — and recording ineligible would be
+        A fresh evaluation row per attempt, rather than one per run: a run that
+        reaches this phase, writes its findings and then fails at activation is
+        resumable, and re-running the pass under the same anchor would collide
+        with the findings the first attempt already wrote.
+
+        The failure path records that the pass produced no verdict and re-raises
+        rather than deciding anything. A crashed evaluator said neither "the
+        data is fine" nor "the data is bad", and writing ineligible would be
         indistinguishable from having checked. Letting the Task fail keeps the
         two apart, and leaves the previous snapshot as head.
         """
         with self._sessions() as session:
             run = session.get(SyncRun, run_id)
             run.phase = SyncPhase.EVALUATING_QUALITY
+            evaluation = QualityEvaluation(
+                kind=QualityEvaluationKind.SYNC,
+                source=self._source,
+                sync_run_id=run_id,
+                status=QualityEvaluationStatus.RUNNING,
+                policy=policy_snapshot(self._quality_policy),
+            )
+            session.add(evaluation)
+            session.flush()
+            evaluation_id = evaluation.id
             session.commit()
 
         calendar = DbCalendarPort(self._sessions, plan.calendar_publication_id)
+        try:
+            with self._sessions() as session:
+                outcome = quality_pass.evaluate(
+                    session,
+                    evaluation_id=evaluation_id,
+                    scope=quality_pass.RunScope(run_id),
+                    source=self._source,
+                    calendar=calendar,
+                    calendar_publication_id=plan.calendar_publication_id,
+                    policy=self._quality_policy,
+                )
+                session.commit()
+        except Exception as exc:
+            with self._sessions() as session:
+                failed = session.get(QualityEvaluation, evaluation_id)
+                failed.status = QualityEvaluationStatus.FAILED
+                failed.error_summary = str(exc)
+                session.commit()
+            raise
+
         with self._sessions() as session:
-            outcome = quality_pass.evaluate_run(
-                session,
-                run_id,
-                self._source,
-                calendar,
-                plan.calendar_publication_id,
-                self._quality_policy,
-            )
+            done = session.get(QualityEvaluation, evaluation_id)
+            done.status = QualityEvaluationStatus.SUCCEEDED
             session.commit()
-        return outcome.is_backtest_eligible
+        return _Evaluation(id=evaluation_id, is_backtest_eligible=outcome.is_backtest_eligible)
 
     def _complete_without_bars(
         self, run_id: uuid.UUID, plan: _FrozenPlan, mode: SyncMode | None
@@ -994,7 +1028,7 @@ class JQuantsSyncWorkflow:
         run_id: uuid.UUID,
         plan: _FrozenPlan,
         master_snapshot_id: uuid.UUID,
-        is_backtest_eligible: bool = True,
+        evaluation: _Evaluation,
     ) -> SyncOutcome:
         """Create the immutable snapshot, switch the head, and terminate both
         SyncRun and Task — all in one transaction (§9.2)."""
@@ -1041,12 +1075,15 @@ class JQuantsSyncWorkflow:
                 verified_start=plan.target_dates[0] if plan.target_dates else None,
                 verified_end=plan.target_dates[-1] if plan.target_dates else None,
                 plan_fingerprint=plan.fingerprint,
-                is_backtest_eligible=is_backtest_eligible,
-                version=_next_snapshot_version(session, self._source),
+                is_backtest_eligible=evaluation.is_backtest_eligible,
+                version=source_state.next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
-            _set_head(session, head, self._source, snapshot.id, self._now())
+            source_state.set_head(session, head, self._source, snapshot.id, self._now())
+            # Closed here, in the activation transaction, because until now the
+            # evaluation had judged data no snapshot existed for.
+            session.get(QualityEvaluation, evaluation.id).produced_snapshot_id = snapshot.id
 
             terminal = (
                 SyncRunStatus.SUCCEEDED
@@ -1094,11 +1131,11 @@ class JQuantsSyncWorkflow:
                 # byte-identical bar versions. Re-running the pass would spend
                 # time proving an answer that cannot have changed.
                 is_backtest_eligible=previous.is_backtest_eligible,
-                version=_next_snapshot_version(session, self._source),
+                version=source_state.next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
-            _set_head(session, head, self._source, snapshot.id, self._now())
+            source_state.set_head(session, head, self._source, snapshot.id, self._now())
 
             run.phase = SyncPhase.COMPLETE
             run.current_batch = None
@@ -1329,6 +1366,15 @@ class _FrozenPlan:
     calendar_publication_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class _Evaluation:
+    """What the quality phase hands to snapshot activation: the verdict, and
+    the row to attach the resulting snapshot to."""
+
+    id: uuid.UUID
+    is_backtest_eligible: bool
+
+
 class _CodedError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -1336,18 +1382,6 @@ class _CodedError(RuntimeError):
 
 
 # --------------------------------------------------------------------- helpers
-
-
-def _advisory_key(name: str) -> int:
-    digest = hashlib.sha256(name.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], "big", signed=True)
-
-
-def _lock_source(session: Session, source: str) -> None:
-    """Transaction-level lock giving concurrent HTTP writers a predictable
-    outcome. The partial unique index is the final guard; this only makes the
-    return value deterministic (§14)."""
-    session.execute(select(func.pg_advisory_xact_lock(_advisory_key(f"market-data-sync:{source}"))))
 
 
 def _lock_run_and_task(session: Session, run_id: uuid.UUID) -> tuple[SyncRun, Task]:
@@ -1382,16 +1416,6 @@ _TASK_TERMINAL = {
     SyncRunStatus.PARTIAL_FAILED: TaskStatus.FAILED,
     SyncRunStatus.CANCELLED: TaskStatus.CANCELLED,
 }
-
-
-def _set_head(
-    session: Session, head: DataSnapshotHead | None, source: str, snapshot_id: uuid.UUID, when: datetime
-) -> None:
-    if head is None:
-        session.add(DataSnapshotHead(source=source, snapshot_id=snapshot_id, updated_at=when))
-    else:
-        head.snapshot_id = snapshot_id
-        head.updated_at = when
 
 
 def is_resumable(
@@ -1611,18 +1635,6 @@ def _bar_record(
         session.add(record)
         session.flush()
     return record
-
-
-def _next_snapshot_version(session: Session, source: str) -> int:
-    """Next per-source counter, taken under the head lock the caller already holds.
-
-    A Postgres sequence cannot be per-source and would leave gaps on rollback,
-    and a gap in a number shown to a person reads as lost data.
-    """
-    highest = session.scalar(
-        select(func.max(DataSnapshot.version)).where(DataSnapshot.source == source)
-    )
-    return (highest or 0) + 1
 
 
 def _calendar_dates(rows: list[dict[str, Any]]) -> list[date]:

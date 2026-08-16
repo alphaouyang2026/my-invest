@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.models.market_data import (
     DataSnapshot,
     DataSnapshotHead,
+    QualityEvaluation,
     QualityFinding,
     QualitySeverity,
 )
@@ -26,8 +27,11 @@ SATURDAY = date(2024, 3, 9)
 
 
 def _findings(session, run_id) -> dict[str, QualityFinding]:
+    """This run's findings, reached through the evaluation that wrote them."""
     rows = session.scalars(
-        select(QualityFinding).where(QualityFinding.sync_run_id == run_id)
+        select(QualityFinding)
+        .join(QualityEvaluation, QualityEvaluation.id == QualityFinding.evaluation_id)
+        .where(QualityEvaluation.sync_run_id == run_id)
     ).all()
     return {row.rule: row for row in rows}
 
@@ -152,7 +156,7 @@ def test_a_broken_evaluator_fails_the_task_instead_of_guessing(
     def explode(*args, **kwargs):
         raise RuntimeError("evaluator bug")
 
-    monkeypatch.setattr(quality_pass, "evaluate_run", explode)
+    monkeypatch.setattr(quality_pass, "evaluate", explode)
 
     workflow = make_workflow(FakeAdapter(trading_dates=OPEN_DAYS))
     run_id = workflow.start().id

@@ -19,6 +19,8 @@ from app.models.market_data import (
     TERMINAL_RUN_STATUSES,
     EndpointPublication,
     PublicationStatus,
+    QualityEvaluation,
+    QualityEvaluationStatus,
     SyncRun,
     SyncRunStatus,
 )
@@ -94,6 +96,7 @@ def recover_orphaned_tasks(
                 task.status = TaskStatus.FAILED
                 task.error = "Orphaned by worker restart while RUNNING"
                 task.finished_at = datetime.now(timezone.utc)
+                _fail_orphaned_evaluation(session, task)
                 logger.warning("task.orphaned_on_restart", task_type=task.task_type)
                 recovered += 1
                 continue
@@ -103,6 +106,27 @@ def recover_orphaned_tasks(
         session.commit()
         clear_contextvars()
     return recovered
+
+
+def _fail_orphaned_evaluation(session: Session, task: Task) -> None:
+    """Close out a re-validation whose worker died mid-pass.
+
+    Nothing here is resumable — the pass is one set of aggregate queries, so it
+    simply runs again — but the row must not be left RUNNING: it is what the UI
+    reports, and what the next re-validation checks before starting. A stuck
+    RUNNING row would be exactly the dead end this ticket exists to remove.
+    """
+    evaluation = session.scalar(
+        select(QualityEvaluation).where(QualityEvaluation.task_id == task.id).with_for_update()
+    )
+    if evaluation is None or evaluation.status not in {
+        QualityEvaluationStatus.QUEUED,
+        QualityEvaluationStatus.RUNNING,
+    }:
+        return
+    evaluation.status = QualityEvaluationStatus.FAILED
+    evaluation.error_summary = "Orphaned by worker restart while running"
+    logger.warning("quality_evaluation.orphaned_on_restart", evaluation_id=str(evaluation.id))
 
 
 def _recover_sync_run(session: Session, run: SyncRun, task: Task, policy: SyncPolicy) -> int:

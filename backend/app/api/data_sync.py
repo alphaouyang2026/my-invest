@@ -108,7 +108,12 @@ def create_jquants_sync(
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    return workflow.start(SyncNow(), idempotency_key=idempotency_key).to_dict()
+    try:
+        return workflow.start(SyncNow(), idempotency_key=idempotency_key).to_dict()
+    except SyncConflict as exc:
+        # Only reachable while a re-validation holds the source: an active run
+        # is returned rather than refused.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/runs")

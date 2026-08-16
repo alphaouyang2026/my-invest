@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 import DataCenter from '../app/data-center'
 
@@ -187,6 +187,64 @@ test('an exhausted run offers force retry behind the reason and attempt count', 
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
     expect(post![0]).toContain('/data-sync/runs/run-6/force-retry')
   })
+})
+
+test('re-validation is offered beside the snapshot heading and reports its status', async () => {
+  const snapshot = {
+    id: 'snap-1',
+    version: 3,
+    coverage_start: '2024-01-04',
+    coverage_end: '2025-01-15',
+    evaluation_kind: 'sync',
+    is_backtest_eligible: true,
+    is_current: true,
+  }
+  const fetchMock = mockApi({
+    '/data-sync/status': CONFIGURED,
+    '/data-sync/runs': [],
+    '/quality/revalidations/latest': null,
+    '/snapshots': [snapshot],
+    POST: { id: 'eval-1', status: 'queued' },
+  })
+
+  render(<DataCenter />)
+
+  // One action for the whole section: there is no snapshot to pick, so there
+  // is no per-row button either.
+  const button = await screen.findByRole('button', { name: '重新校验' })
+  fireEvent.click(button)
+
+  await waitFor(() => {
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(post![0]).toContain('/quality/revalidations')
+  })
+  expect(await screen.findByText('重新校验排队中')).toBeInTheDocument()
+})
+
+test('a snapshot produced by re-validation says so', async () => {
+  const revalidated = {
+    id: 'snap-2',
+    version: 4,
+    coverage_start: '2024-01-04',
+    coverage_end: '2025-01-15',
+    evaluation_kind: 'revalidate',
+    is_backtest_eligible: false,
+    is_current: true,
+  }
+  mockApi({
+    '/data-sync/status': CONFIGURED,
+    '/data-sync/runs': [],
+    '/quality/revalidations/latest': { id: 'eval-1', status: 'succeeded' },
+    '/snapshots': [revalidated],
+  })
+
+  render(<DataCenter />)
+
+  // Same coverage as the snapshot it re-judged, so without this the new
+  // version has nothing explaining where it came from.
+  const row = await screen.findByRole('button', { name: /v4/ })
+  expect(within(row).getByText('重新校验')).toBeInTheDocument()
+  expect(screen.getByText('不可用于回测')).toBeInTheDocument()
 })
 
 test('a rejected snapshot is labelled and its reasons open on demand', async () => {
