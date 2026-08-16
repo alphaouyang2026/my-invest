@@ -28,12 +28,15 @@ from app.models.market_data import (
     BarQualityStatus,
     BarRecord,
     BarVersion,
+    DataSnapshot,
+    DataSnapshotHead,
     EndpointPublication,
     Instrument,
     PublicationBarObservation,
     PublicationStatus,
     QualityFinding,
     QualitySeverity,
+    TradingCalendar,
 )
 from app.services.calendar_port import CalendarCoverageError, CalendarPort
 from app.services.quality_rules import QualityPolicy, QualityRule
@@ -71,12 +74,16 @@ class QualityOutcome:
 def evaluate_run(
     session: Session,
     run_id,
+    source: str,
     calendar: CalendarPort,
+    calendar_publication_id,
     policy: QualityPolicy,
 ) -> QualityOutcome:
     """Write this run's contextual findings and report whether any reject."""
     observed = _load_observed(session, run_id)
-    findings: list[QualityFinding] = []
+    findings: list[QualityFinding] = _calendar_revision_findings(
+        session, run_id, source, calendar_publication_id, policy
+    )
 
     if observed:
         by_date: dict[date, list[_Observed]] = defaultdict(list)
@@ -159,28 +166,15 @@ def _evaluate_date(
     findings: list[QualityFinding] = []
     evaluated = len(bars)
 
+    # Cannot raise in practice: every date here came from this run's plan,
+    # which is this calendar's own open days. Guarded anyway so a future caller
+    # evaluating a wider set degrades to "not evaluated" rather than crashing.
     try:
         is_open = calendar.is_open(trade_date)
     except CalendarCoverageError:
-        # Outside the overlap of the two coverages. Reporting here would fire
-        # on nearly every sync at the boundary, because the calendar is
-        # republished annually while bars roll daily.
         return findings
 
-    if not is_open:
-        codes = [item.code for item in bars]
-        findings.append(
-            _finding(
-                run_id,
-                QualityRule.CALENDAR_DISAGREEMENT,
-                trade_date,
-                QualitySeverity.WARNING,
-                codes,
-                evaluated,
-                policy,
-            )
-        )
-    else:
+    if is_open:
         silent = [item.code for item in bars if item.raw_volume == 0]
         if silent:
             findings.append(
@@ -244,6 +238,73 @@ def _missing_bars_on_open_days(run_id, covered: list[date], calendar: CalendarPo
         for day in expected
         if day not in present
     ]
+
+
+def _calendar_revision_findings(
+    session: Session,
+    run_id,
+    source: str,
+    current_publication_id,
+    policy: QualityPolicy,
+) -> list[QualityFinding]:
+    """Days this calendar closed that we already hold bars for.
+
+    Within a single run the calendar and the bars cannot disagree — every date
+    fetched came from this calendar's own open days. The disagreement only
+    becomes possible across a revision, when the annual republication closes a
+    day the stored data already covers. Diffing against the previous snapshot's
+    calendar is therefore both the cheapest and the only meaningful check: the
+    diff is usually empty, and a full re-scan would re-report the same days on
+    every sync.
+    """
+    head = session.get(DataSnapshotHead, source)
+    if head is None:
+        return []
+    previous = session.get(DataSnapshot, head.snapshot_id)
+    if previous is None or previous.calendar_publication_id == current_publication_id:
+        return []
+
+    before = _calendar_map(session, previous.calendar_publication_id)
+    after = _calendar_map(session, current_publication_id)
+
+    findings = []
+    for day, was_open in before.items():
+        if not was_open or after.get(day) is not False:
+            continue
+        codes = _codes_with_bars(session, source, day)
+        if codes:
+            findings.append(
+                _finding(
+                    run_id,
+                    QualityRule.CALENDAR_DISAGREEMENT,
+                    day,
+                    QualitySeverity.WARNING,
+                    codes,
+                    len(codes),
+                    policy,
+                )
+            )
+    return findings
+
+
+def _calendar_map(session: Session, publication_id) -> dict[date, bool]:
+    return dict(
+        session.execute(
+            select(TradingCalendar.trade_date, TradingCalendar.is_open).where(
+                TradingCalendar.publication_id == publication_id
+            )
+        ).all()
+    )
+
+
+def _codes_with_bars(session: Session, source: str, trade_date: date) -> list[str]:
+    return list(
+        session.scalars(
+            select(Instrument.source_code)
+            .join(BarRecord, BarRecord.instrument_id == Instrument.instrument_id)
+            .where(BarRecord.source == source, BarRecord.trade_date == trade_date)
+        ).all()
+    )
 
 
 def _adjustment_consistency(run_id, observed: list[_Observed]) -> list[QualityFinding]:

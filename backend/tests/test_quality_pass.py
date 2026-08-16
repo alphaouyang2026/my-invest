@@ -160,6 +160,115 @@ def test_a_broken_evaluator_fails_the_task_instead_of_guessing(
         assert session.get(DataSnapshotHead, "jquants") is None
 
 
+def test_an_open_day_that_returned_nothing_is_recorded(make_workflow, session_factory):
+    """A trading day with no bars at all is a hole, not an empty day. Nothing
+    on the row-local side can notice it — there is no row to judge."""
+    silent_day = OPEN_DAYS[2]
+
+    def bars(trade_date: date) -> list[dict]:
+        return [] if trade_date == silent_day else [bar_row("13010", trade_date)]
+
+    run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
+
+    with session_factory() as session:
+        finding = _findings(session, run_id)[QualityRule.MISSING_TRADING_DAY.value]
+        assert finding.trade_date == silent_day
+        assert finding.severity is QualitySeverity.WARNING
+
+
+def test_an_unexplained_step_in_the_adjusted_series_is_flagged(make_workflow, session_factory):
+    """The adjusted series may only move relative to raw where the factor says
+    it does. Deliberately formula-agnostic: any multiplicative convention makes
+    the ratio hold steady while the factor is 1."""
+
+    def bars(trade_date: date) -> list[dict]:
+        row = bar_row("13010", trade_date)
+        row["AdjFactor"] = 1
+        # The ratio silently halves on the third day with no factor to explain it.
+        row["AdjC"] = 5 if trade_date >= OPEN_DAYS[2] else 10
+        return [row]
+
+    run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
+
+    with session_factory() as session:
+        finding = _findings(session, run_id)[QualityRule.ADJUSTMENT_INCONSISTENT.value]
+        assert finding.trade_date == OPEN_DAYS[2]
+        assert finding.severity is QualitySeverity.WARNING
+        assert _snapshot(session, run_id).is_backtest_eligible is True
+
+
+def test_a_split_explained_by_its_factor_is_not_flagged(make_workflow, session_factory):
+    """A real corporate action must not be reported as a defect."""
+
+    def bars(trade_date: date) -> list[dict]:
+        row = bar_row("13010", trade_date)
+        if trade_date >= OPEN_DAYS[2]:
+            row["AdjC"] = 5
+            row["AdjFactor"] = 0.5
+        else:
+            row["AdjC"] = 10
+            row["AdjFactor"] = 1
+        return [row]
+
+    run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
+
+    with session_factory() as session:
+        assert QualityRule.ADJUSTMENT_INCONSISTENT.value not in _findings(session, run_id)
+
+
+def test_an_empty_incremental_inherits_the_previous_verdict(make_workflow, session_factory):
+    """Nothing new was published, so the new snapshot resolves to byte-identical
+    bar versions. Re-judging could only produce the same answer, and declaring
+    it unknown would make a clean dataset unusable for no reason."""
+
+    def bad(trade_date: date) -> list[dict]:
+        return [bar_row("13010", trade_date, close=-5), bar_row("13020", trade_date)]
+
+    first = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bad))
+    second = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=lambda d: []))
+
+    with session_factory() as session:
+        assert _snapshot(session, first).is_backtest_eligible is False
+        inherited = _snapshot(session, second)
+        assert inherited.is_backtest_eligible is False
+        assert not _findings(session, second), "an empty incremental re-runs nothing"
+
+
+def test_a_revision_that_closes_a_day_we_hold_bars_for_is_flagged(
+    make_workflow, session_factory
+):
+    """The only way the calendar and the bars can ever disagree.
+
+    Within one run they cannot: every date fetched came from that run's own
+    calendar. It takes a republication closing a day the stored data already
+    covers — which is exactly what the annual March update can do.
+    """
+    closed_later = OPEN_DAYS[3]
+    _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS))
+
+    still_open = [day for day in OPEN_DAYS if day != closed_later]
+    second = _run(
+        make_workflow,
+        FakeAdapter(trading_dates=still_open, closed_dates=[closed_later]),
+    )
+
+    with session_factory() as session:
+        finding = _findings(session, second)[QualityRule.CALENDAR_DISAGREEMENT.value]
+        assert finding.trade_date == closed_later
+        assert finding.severity is QualitySeverity.WARNING
+        assert finding.sample == ["13010"]
+
+
+def test_an_unchanged_calendar_reports_no_disagreement(make_workflow, session_factory):
+    """The diff is empty on an ordinary sync, so the rule stays silent instead
+    of re-reporting the same days forever."""
+    _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS))
+    second = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS))
+
+    with session_factory() as session:
+        assert QualityRule.CALENDAR_DISAGREEMENT.value not in _findings(session, second)
+
+
 def test_snapshot_versions_count_up_per_source(make_workflow, session_factory):
     """A number shown to a person has to count; gaps read as lost data."""
     first = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS))

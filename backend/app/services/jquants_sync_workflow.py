@@ -825,7 +825,14 @@ class JQuantsSyncWorkflow:
 
         calendar = DbCalendarPort(self._sessions, plan.calendar_publication_id)
         with self._sessions() as session:
-            outcome = quality_pass.evaluate_run(session, run_id, calendar, self._quality_policy)
+            outcome = quality_pass.evaluate_run(
+                session,
+                run_id,
+                self._source,
+                calendar,
+                plan.calendar_publication_id,
+                self._quality_policy,
+            )
             session.commit()
         return outcome.is_backtest_eligible
 
