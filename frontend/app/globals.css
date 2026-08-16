@@ -66,6 +66,10 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .metrics dt { color: var(--muted); font-size: .75rem; }
 .metrics dd { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
 .endpoint { margin-top: 16px; font: .82rem ui-monospace, monospace; }
+.escalate { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.escalate summary { cursor: pointer; color: var(--muted); font-size: .82rem; }
+.escalate .notice { margin: 8px 0 12px; }
+
 .snapshots { margin-top: 32px; }
 .snapshots h3 { margin-bottom: 10px; }
 .snapshot-row {

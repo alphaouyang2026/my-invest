@@ -161,6 +161,23 @@ def cancel_sync_run(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post("/runs/{run_id}/force-retry", status_code=status.HTTP_202_ACCEPTED)
+def force_retry_sync_run(
+    run_id: uuid.UUID, workflow: JQuantsSyncWorkflow = Depends(get_sync_workflow)
+) -> dict:
+    """Separate from resume on purpose: this overturns a verdict the system
+    already reached, so it should not share an entry point with routine
+    continuation."""
+    try:
+        return workflow.force_retry(run_id).to_dict()
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Sync run not found") from exc
+    except SyncConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SyncInvariantError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/runs/{run_id}/resume", status_code=status.HTTP_202_ACCEPTED)
 def resume_sync_run(
     run_id: uuid.UUID, workflow: JQuantsSyncWorkflow = Depends(get_sync_workflow)

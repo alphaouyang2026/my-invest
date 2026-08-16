@@ -27,9 +27,13 @@ type SyncRun = {
   actual_min?: string | null
   actual_max?: string | null
   resumable?: boolean
+  task_attempt?: number
+  error_code?: string | null
   error_summary?: string | null
   created_at?: string
 }
+
+const TERMINAL_FAILURES = new Set(['failed', 'partial_failed', 'cancelled'])
 
 type SourceStatus = {
   configuration: 'not_configured' | 'configured' | 'invalid'
@@ -217,6 +221,27 @@ export default function DataCenter() {
             {' · '}{latest.actual_min ?? '—'} → {latest.actual_max ?? '—'}
           </p>
           {latest.error_summary && <p className="error">{latest.error_summary}</p>}
+
+          {/* Tucked away on purpose: this overturns a verdict the system
+              already reached, so it should not sit beside 立即同步. No
+              confirmation dialog — showing the reason and the attempt count
+              before the click is worth more than asking afterwards. */}
+          {TERMINAL_FAILURES.has(latest.status) && (
+            <details className="escalate">
+              <summary>更多</summary>
+              <p className="endpoint">
+                失败原因：{latest.error_summary ?? latest.error_code ?? '未记录'}
+                {' · '}已尝试 {latest.task_attempt ?? 0} 次
+              </p>
+              <p className="notice">
+                强制重试会清零尝试次数并让这次运行从检查点继续。已发布的批次不会重抓。
+              </p>
+              <button
+                className="secondary"
+                onClick={() => void command(`/data-sync/runs/${latest.id}/force-retry`, '无法强制重试')}
+              >强制重试</button>
+            </details>
+          )}
         </article>
       ) : <p className="empty">尚无同步运行。配置密钥后可开始首次回填。</p>}
 

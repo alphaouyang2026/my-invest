@@ -321,6 +321,49 @@ class JQuantsSyncWorkflow:
             session.commit()
             return self._view(session, run)
 
+    def force_retry(self, run_id: uuid.UUID) -> SyncRunView:
+        """Revive a run the worker gave up on, attempt counter and all.
+
+        The counter records how many times a worker *picked the task up*, not
+        how many times anything failed — a graceful restart consumes one just
+        as a crash does — so a run can reach the cap with nothing wrong with
+        it. Deliberately a separate command from `resume`: continuing a run is
+        routine, overturning the verdict the system already reached is not, and
+        the caller should have looked at why before doing it.
+
+        There is no second cap. A human confirming each time is the throttle;
+        a number on top of that would only build the dead end again.
+        """
+        with self._sessions() as session:
+            _lock_source(session, self._source)
+            run, task = _lock_run_and_task(session, run_id)
+
+            if task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
+                raise SyncConflict("Sync run is already queued or running")
+            if run.status in {SyncRunStatus.SUCCEEDED, SyncRunStatus.NO_CHANGE}:
+                # Re-judging finished data is re-validation's job (ticket 16).
+                raise SyncConflict("A completed run cannot be retried; re-validate instead")
+
+            self._validate_calendar_checkpoint(session, run)
+            if run.plan_fingerprint:
+                _reset_unpublished_batches(session, run)
+
+            # Both halves together: a terminal run with a cleared counter is a
+            # state nothing else in the system is written against.
+            task.attempt_count = 0
+            task.status = TaskStatus.QUEUED
+            task.error = None
+            task.started_at = None
+            task.finished_at = None
+
+            run.status = SyncRunStatus.QUEUED
+            run.cancel_requested_at = None
+            run.finished_at = None
+            run.error_code = None
+            run.error_summary = None
+            session.commit()
+            return self._view(session, run)
+
     # ---------------------------------------------------------------- execution
 
     def execute(self, run_id: uuid.UUID) -> SyncOutcome:

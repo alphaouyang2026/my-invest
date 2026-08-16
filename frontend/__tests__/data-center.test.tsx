@@ -159,6 +159,36 @@ test('a non-resumable run offers no resume button', async () => {
   expect(screen.queryByRole('button', { name: '恢复运行' })).toBeNull()
 })
 
+test('an exhausted run offers force retry behind the reason and attempt count', async () => {
+  const spent = {
+    id: 'run-6',
+    status: 'partial_failed',
+    resumable: false,
+    task_attempt: 3,
+    error_summary: 'Exceeded 3 worker attempts',
+  }
+  const fetchMock = mockApi({
+    '/data-sync/status': { ...CONFIGURED, latest_run: spent },
+    '/data-sync/runs': [spent],
+    '/snapshots': [],
+    POST: { ...spent, status: 'queued' },
+  })
+
+  render(<DataCenter />)
+
+  // Resume is gone once attempts are spent — force retry is the only way out.
+  await waitFor(() => expect(screen.getAllByText('partial_failed').length).toBeGreaterThan(0))
+  expect(screen.queryByRole('button', { name: '恢复运行' })).toBeNull()
+
+  expect(screen.getByText(/已尝试 3 次/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '强制重试' }))
+
+  await waitFor(() => {
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(post![0]).toContain('/data-sync/runs/run-6/force-retry')
+  })
+})
+
 test('a rejected snapshot is labelled and its reasons open on demand', async () => {
   const snapshot = {
     id: 'snap-1',
