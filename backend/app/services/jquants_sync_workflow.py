@@ -648,6 +648,11 @@ class JQuantsSyncWorkflow:
     ) -> None:
         """Record what this publication saw — every returned row, UNCHANGED
         included, so the snapshot can resolve versions by sequence alone."""
+        # Every row here shares `trade_date` (enforced below), so the business
+        # key reduces to the bar record. Checked while both rows are still in
+        # hand: the observation upsert further down is keyed by
+        # (publication, bar record) and would quietly keep only the last one.
+        seen: set[uuid.UUID] = set()
         with self._sessions() as session:
             for row in rows:
                 code = str(_required(row, "Code"))
@@ -658,6 +663,11 @@ class JQuantsSyncWorkflow:
                     )
                 instrument = _instrument(session, self._source, code)
                 record = _bar_record(session, self._source, instrument.instrument_id, row_date)
+                if record.id in seen:
+                    raise ValueError(
+                        f"J-Quants returned {code} twice for {row_date}; the batch contradicts itself"
+                    )
+                seen.add(record.id)
                 values = _bar_values(row)
                 content_hash = _hash(values)
 
