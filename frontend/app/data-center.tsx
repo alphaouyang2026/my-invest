@@ -44,8 +44,48 @@ const PHASE_LABELS: Record<string, string> = {
   planning: '冻结同步计划',
   bars: '同步日线',
   master: '同步证券主数据',
+  evaluating_quality: '校验数据质量',
   activating_snapshot: '激活数据快照',
   complete: '已完成',
+}
+
+/**
+ * Snapshots are produced by a successful sync, never created by hand, so this
+ * is a read-only view of what already exists.
+ */
+type Snapshot = {
+  id: string
+  version: number
+  coverage_start?: string | null
+  coverage_end?: string | null
+  verified_start?: string | null
+  verified_end?: string | null
+  is_backtest_eligible: boolean
+  is_current: boolean
+  created_at?: string
+}
+
+type Finding = {
+  rule: string
+  trade_date: string
+  severity: 'warning' | 'rejecting'
+  affected_count: number
+  evaluated_count: number
+  sample: string[]
+}
+
+type SnapshotDetail = Snapshot & { findings: Finding[] }
+
+const RULE_LABELS: Record<string, string> = {
+  missing_critical_field: '关键字段缺失',
+  missing_optional_field: '非关键字段缺失',
+  negative_price: '价格为负',
+  negative_volume: '成交量为负',
+  ohlc_out_of_order: 'OHLC 逻辑错误',
+  calendar_disagreement: '日历修订后仍有行情',
+  missing_trading_day: '开市日缺 K 线',
+  no_trading_activity: '停牌/零成交',
+  adjustment_inconsistent: '复权比值无故突变',
 }
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,14 +101,18 @@ export default function DataCenter() {
   const [source, setSource] = useState<SourceStatus | null>(null)
   const [runs, setRuns] = useState<SyncRun[]>([])
   const [active, setActive] = useState<SyncRun | null>(null)
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [detail, setDetail] = useState<SnapshotDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const status = await jsonFetch<SourceStatus>('/data-sync/status')
       const history = await jsonFetch<SyncRun[]>('/data-sync/runs')
+      const stored = await jsonFetch<Snapshot[]>('/snapshots')
       setSource(status)
       setRuns(history)
+      setSnapshots(stored)
       setActive(history.find((run) => !terminal.has(run.status)) ?? null)
       setError(null)
     } catch (cause) {
@@ -98,6 +142,19 @@ export default function DataCenter() {
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : failure)
+    }
+  }
+
+  async function inspect(snapshotId: string) {
+    if (detail?.id === snapshotId) {
+      setDetail(null)
+      return
+    }
+    try {
+      setDetail(await jsonFetch<SnapshotDetail>(`/snapshots/${snapshotId}`))
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法加载快照详情')
     }
   }
 
@@ -162,6 +219,56 @@ export default function DataCenter() {
           {latest.error_summary && <p className="error">{latest.error_summary}</p>}
         </article>
       ) : <p className="empty">尚无同步运行。配置密钥后可开始首次回填。</p>}
+
+      {snapshots.length > 0 && <div className="snapshots">
+        <h3>数据快照</h3>
+        {snapshots.slice(0, 8).map((snapshot) => (
+          <div key={snapshot.id}>
+            <button
+              type="button"
+              className="snapshot-row"
+              aria-expanded={detail?.id === snapshot.id}
+              onClick={() => void inspect(snapshot.id)}
+            >
+              <strong>v{snapshot.version}</strong>
+              <span>{snapshot.coverage_start ?? '—'} → {snapshot.coverage_end ?? '—'}</span>
+              <span className={snapshot.is_backtest_eligible ? 'eligible' : 'ineligible'}>
+                {snapshot.is_backtest_eligible ? '可用于回测' : '不可用于回测'}
+              </span>
+              {snapshot.is_current && <span className="current">当前</span>}
+            </button>
+            {detail?.id === snapshot.id && (
+              <div className="snapshot-detail">
+                <p className="endpoint">
+                  本次核对范围 {detail.verified_start ?? '—'} → {detail.verified_end ?? '—'}
+                </p>
+                {detail.findings.length === 0 ? (
+                  <p className="empty">质量检查未发现问题。</p>
+                ) : (
+                  <table className="findings">
+                    <thead>
+                      <tr><th>规则</th><th>交易日</th><th>命中</th><th>样本</th></tr>
+                    </thead>
+                    <tbody>
+                      {detail.findings.map((finding) => (
+                        <tr
+                          key={`${finding.rule}-${finding.trade_date}`}
+                          className={finding.severity === 'rejecting' ? 'rejecting' : 'warning'}
+                        >
+                          <td>{RULE_LABELS[finding.rule] ?? finding.rule}</td>
+                          <td>{finding.trade_date}</td>
+                          <td>{finding.affected_count} / {finding.evaluated_count}</td>
+                          <td>{finding.sample.slice(0, 5).join('、') || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>}
 
       {runs.length > 0 && <div className="history">
         <h3>最近运行</h3>
