@@ -110,7 +110,12 @@ def _per_date_findings(
 ) -> list[QualityFinding]:
     """Impossible prices and silent securities, counted per trade date."""
     negative = BarVersion.quality_rules.any(QualityRule.NEGATIVE_PRICE.value)
-    silent = BarVersion.raw_volume == 0
+    # A no-sale day arrives as NULL, not zero — J-Quants records price and
+    # volume alike as Null when nothing traded, and in two years of real data
+    # there is not one zero-volume row against 92,772 all-null ones. Checking
+    # for zero left this rule silent in production while the days it exists to
+    # surface were the single largest category in the data.
+    silent = BarVersion.raw_volume.is_(None)
 
     counts = session.execute(
         _observations(run_id)
@@ -221,21 +226,25 @@ def _missing_trading_days(session: Session, run_id, calendar: CalendarPort) -> l
 def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> list[QualityFinding]:
     """The adjusted series must only step where the factor says it does.
 
-    Deliberately formula-agnostic: it asserts that `adjusted/raw` holds steady
-    between consecutive observed dates unless an adjustment factor other than 1
-    appears, which is true of any multiplicative convention. The exact algebra
-    J-Quants uses is not confirmed, so this stays a warning and is kept out of
-    the escalation arithmetic until real data pins the formula down.
+    Real data settled the formula this once guessed at: `adjusted_close` is
+    `raw_close` times the cumulative factor, **rounded to 0.1 yen**. That
+    rounding makes the ratio drift in its fifth decimal every single day for
+    any split-affected security, so an exact comparison flagged 46,756 steps
+    across 485 days against roughly 500 genuine corporate actions.
 
-    The LAG runs in the database; only the violations — normally none — are
-    returned.
+    The comparison is therefore against the adjusted price the previous ratio
+    implies, within the rounding quantum, rather than against the ratio itself.
+    It stays a warning and out of the escalation arithmetic.
+
+    The LAG runs in the database; only the violations are returned.
     """
     ratio = BarVersion.adjusted_close / func.nullif(BarVersion.raw_close, 0)
     ratios = (
         _observations(run_id)
         .add_columns(
             Instrument.source_code,
-            ratio.label("ratio"),
+            BarVersion.raw_close.label("raw_close"),
+            BarVersion.adjusted_close.label("adjusted_close"),
             BarVersion.adjustment_factor.label("factor"),
             func.lag(ratio)
             .over(partition_by=BarRecord.instrument_id, order_by=BarRecord.trade_date)
@@ -245,6 +254,7 @@ def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> lis
         .subquery()
     )
 
+    implied = ratios.c.raw_close * ratios.c.previous
     rows = session.execute(
         select(
             ratios.c.trade_date,
@@ -253,8 +263,8 @@ def _adjustment_findings(session: Session, run_id, policy: QualityPolicy) -> lis
         )
         .where(
             ratios.c.previous.is_not(None),
-            ratios.c.ratio.is_not(None),
-            ratios.c.ratio != ratios.c.previous,
+            ratios.c.adjusted_close.is_not(None),
+            func.abs(ratios.c.adjusted_close - implied) > policy.adjustment_tolerance_yen,
             (ratios.c.factor.is_(None)) | (ratios.c.factor == 1),
         )
         .group_by(ratios.c.trade_date)

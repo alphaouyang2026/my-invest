@@ -101,11 +101,16 @@ def test_the_escalation_threshold_is_configurable(make_workflow, session_factory
 
 
 def test_a_day_with_no_trades_is_only_flagged(make_workflow, session_factory):
-    """A suspension is a real market state, so it is recorded and nothing more."""
+    """A suspension is a real market state, so it is recorded and nothing more.
+
+    J-Quants reports a no-sale day as Null across price and volume alike, not
+    as a zero — two years of real data contain 92,772 all-null bars and no
+    zero-volume ones at all.
+    """
 
     def bars(trade_date: date) -> list[dict]:
         row = bar_row("13010", trade_date)
-        row["Vo"] = 0
+        row["Vo"] = None
         return [row]
 
     run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
@@ -124,7 +129,7 @@ def test_warnings_never_accumulate_into_a_rejection(make_workflow, session_facto
         rows = []
         for index in range(20):
             row = bar_row(f"1{index:04d}", trade_date)
-            row["Vo"] = 0
+            row["Vo"] = None
             rows.append(row)
         return rows
 
@@ -184,7 +189,8 @@ def test_an_unexplained_step_in_the_adjusted_series_is_flagged(make_workflow, se
     def bars(trade_date: date) -> list[dict]:
         row = bar_row("13010", trade_date)
         row["AdjFactor"] = 1
-        # The ratio silently halves on the third day with no factor to explain it.
+        # The adjusted price silently halves on the third day with no factor
+        # to explain it — far beyond the 0.1 yen rounding the source applies.
         row["AdjC"] = 5 if trade_date >= OPEN_DAYS[2] else 10
         return [row]
 
@@ -208,6 +214,26 @@ def test_a_split_explained_by_its_factor_is_not_flagged(make_workflow, session_f
         else:
             row["AdjC"] = 10
             row["AdjFactor"] = 1
+        return [row]
+
+    run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))
+
+    with session_factory() as session:
+        assert QualityRule.ADJUSTMENT_INCONSISTENT.value not in _findings(session, run_id)
+
+
+def test_rounding_in_the_adjusted_series_is_not_a_defect(make_workflow, session_factory):
+    """The source rounds the adjusted price to 0.1 yen, so a split-affected
+    security's ratio drifts every day. Comparing ratios exactly reported 46,756
+    steps across 485 days of real data against roughly 500 real actions."""
+
+    def bars(trade_date: date) -> list[dict]:
+        # A 3:1 split: adjusted is raw/3 rounded to 0.1, so the ratio wobbles.
+        closes = {0: 3995, 1: 4000, 2: 3990, 3: 4010, 4: 3985}
+        close = closes[OPEN_DAYS.index(trade_date)]
+        row = bar_row("13010", trade_date, close=close)
+        row["AdjFactor"] = 1
+        row["AdjC"] = round(close / 3, 1)
         return [row]
 
     run_id = _run(make_workflow, FakeAdapter(trading_dates=OPEN_DAYS, bars=bars))

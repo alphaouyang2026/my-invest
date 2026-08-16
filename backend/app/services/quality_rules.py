@@ -95,6 +95,16 @@ class QualityPolicy:
     #: carries so an investigation has a place to start without the table
     #: growing to millions of rows.
     finding_sample_limit: int = 100
+    #: How far the adjusted close may sit from what the previous day's ratio
+    #: implies before the step counts as unexplained, in yen.
+    #:
+    #: Not a magic number: J-Quants rounds the adjusted series to 0.1 yen, so a
+    #: split-affected security drifts by up to ±0.05 on its own account, and
+    #: the ratio it is compared against carries roughly the same again from its
+    #: own rounding. 0.15 covers both with headroom for a day's price move.
+    #: Measured against real data — an exact comparison reported 46,756
+    #: violations across 485 days, where roughly 500 corporate actions exist.
+    adjustment_tolerance_yen: Decimal = Decimal("0.15")
 
 
 def evaluate_row_local(
