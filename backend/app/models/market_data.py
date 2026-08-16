@@ -28,7 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -94,6 +94,21 @@ class PublicationStatus(str, enum.Enum):
     PUBLISHED = "published"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class BarQualityStatus(str, enum.Enum):
+    """The row-local verdict on one bar version.
+
+    Lives with the model rather than with the rules because it is persisted
+    state, and `app.models` must not import `app.services`.
+    """
+
+    OK = "ok"
+    #: A non-critical field is missing — readable, but excluded from pool
+    #: construction and signals.
+    EXCLUDED = "excluded"
+    #: The security cannot be honestly priced or traded on this date.
+    UNTRADABLE = "untradable"
 
 
 class BarObservationDisposition(str, enum.Enum):
@@ -400,7 +415,18 @@ class BarVersion(Base):
     adjusted_close: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
     adjusted_volume: Mapped[Decimal | None] = mapped_column(Numeric(30, 8))
     adjustment_factor: Mapped[Decimal | None] = mapped_column(Numeric(24, 12))
-    quality_status: Mapped[str] = mapped_column(String(30), default="ok", nullable=False)
+    # Row-local quality only. Set once, at insert: the verdict is a pure
+    # function of this row's content, so reusing a version on an A -> B -> A
+    # revert carries the right answer with it. Contextual rules cannot satisfy
+    # that and live on the findings table instead.
+    quality_status: Mapped[BarQualityStatus] = mapped_column(
+        pg_enum(BarQualityStatus, "bar_quality_status"),
+        default=BarQualityStatus.OK,
+        nullable=False,
+    )
+    quality_rules: Mapped[list[str]] = mapped_column(
+        ARRAY(String(40)), default=list, nullable=False
+    )
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

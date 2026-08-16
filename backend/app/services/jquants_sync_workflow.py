@@ -56,6 +56,7 @@ from app.models.market_data import (
 from app.models.task import Task, TaskStatus
 from app.services import snapshot_reader
 from app.services.calendar_normalization import MARKET_TSE, CalendarDay, normalize_calendar
+from app.services.quality_rules import QualityPolicy, evaluate_row_local
 from app.services.sync_planner import (
     choose_target_dates,
     chunk_target_dates,
@@ -205,12 +206,14 @@ class JQuantsSyncWorkflow:
         adapter: JQuantsAdapter | None = None,
         *,
         policy: SyncPolicy = SyncPolicy(),
+        quality_policy: QualityPolicy = QualityPolicy(),
         source: str = "jquants",
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._sessions = session_factory
         self._adapter = adapter
         self._policy = policy
+        self._quality_policy = quality_policy
         self._source = source
         self._now = now
 
@@ -673,8 +676,18 @@ class JQuantsSyncWorkflow:
                     version = existing_version
                     version.last_seen_at = self._now()
                 else:
+                    # Evaluated here, once, because the verdict is a pure
+                    # function of `values` — the same content reaching us again
+                    # reuses the row above and carries this answer with it.
+                    quality_status, quality_rules = evaluate_row_local(
+                        values, self._quality_policy
+                    )
                     version = BarVersion(
-                        bar_record_id=record.id, content_hash=content_hash, **values
+                        bar_record_id=record.id,
+                        content_hash=content_hash,
+                        quality_status=quality_status,
+                        quality_rules=quality_rules,
+                        **values,
                     )
                     session.add(version)
                     session.flush()
