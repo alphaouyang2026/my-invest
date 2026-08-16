@@ -68,3 +68,25 @@
 - 历史时点 Prime 普通股资格、`classification=unknown` 处置和幸存者偏差警告 → 05
 - 财务摘要与决算发表日历 → 13
 - 定时调度、用户自选日期范围、CSV bulk、分钟/Tick、TOPIX 和其他付费端点不属于本 ticket
+
+## Comments
+
+**已知缺陷：半日交易日从未被同步（由 04 的 grilling 会话发现，修复归 04）**
+
+`_calendar_dates()`（`jquants_sync_workflow.py:1484`）只把 `HolDiv == "1"` 的日期纳入同步目标。但 J-Quants V2 的 `HolDiv` 有四个取值，不是两个（官方枚举：<https://jpx-jquants.com/ja/spec/mkt-cal/holiday-division>）：
+
+| 值 | 官方英文 | 官方日文 |
+|---|---|---|
+| `0` | Non-business day | 非営業日 |
+| `1` | Business day | 営業日 |
+| `2` | Day of TSE Half-Day Trading Sessions | 東証半日立会日 |
+| `3` | Non-business days (with holiday trading) | 非営業日(祝日取引あり) |
+
+`HolDiv=2` 是**东证半日立会日**——有真实成交、有真实 K 线的交易日，但当前实现把它当成非交易日跳过，这些日期的日线从未被抓取过。`HolDiv=3` 是大阪交易所的假日衍生品交易，对本系统（东证现货股票）应视为休市，跳过是正确的。
+
+修复不在本票：04 会把判定改为 `HolDiv in {"1","2"}`，并因为其迁移本就要 purge 重同步，缺失的半日 K 线随之补齐。若不修，04 的交易日历一致性规则会把每一个半日交易日报成"开市日缺 K 线"——把本系统自己的 bug 当成数据质量问题上报。
+
+顺带记录两条同源事实，供后续 ticket 参考：
+
+- 日历端点响应**只有 `Date` 和 `HolDiv` 两个字段**，无市场/交易所维度、无 session 信息，也**没有 `pagination_key`**（现有 `_fetch_all` 的分页循环在此跑一轮即退出，无害）。
+- Free 档日历的数据窗口是「12 周前 ~ 2 年 12 周前」，**不含未来日期**（付费档可取到次年年末）。日历每年 3 月底左右批量发布次年数据——这是日历会被真实修订的原因。

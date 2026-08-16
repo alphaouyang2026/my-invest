@@ -50,10 +50,12 @@ from app.models.market_data import (
     SyncRunStatus,
     SyncTargetDate,
     SyncTargetStatus,
+    TradingCalendar,
     publish_sequence_seq,
 )
 from app.models.task import Task, TaskStatus
 from app.services import snapshot_reader
+from app.services.calendar_normalization import MARKET_TSE, CalendarDay, normalize_calendar
 from app.services.sync_planner import (
     choose_target_dates,
     chunk_target_dates,
@@ -394,8 +396,7 @@ class JQuantsSyncWorkflow:
         publication_id = self._begin_publication(run_id, CALENDAR_ENDPOINT, {}, scope_ordinal=0)
         result = self._fetch(lambda: self._adapter.fetch_calendar(), "calendar")
         self._store_pages(publication_id, result.pages)
-        visible_dates = _calendar_dates(result.rows)
-        return self._freeze_plan(run_id, publication_id, visible_dates, result)
+        return self._freeze_plan(run_id, publication_id, normalize_calendar(result.rows), result)
 
     def _freeze_plan_from_raw_pages(self, run_id: uuid.UUID) -> _FrozenPlan:
         """Legacy compatibility only: a PUBLISHED calendar with no plan.
@@ -424,20 +425,26 @@ class JQuantsSyncWorkflow:
                     raise SyncInvariantError("Calendar raw page payload is unreadable; cannot rebuild the plan")
                 rows.extend(data)
             publication_id = publication.id
-        return self._freeze_plan(run_id, publication_id, _calendar_dates(rows), None)
+        return self._freeze_plan(run_id, publication_id, normalize_calendar(rows), None)
 
     def _freeze_plan(
         self,
         run_id: uuid.UUID,
         calendar_publication_id: uuid.UUID,
-        visible_dates: list[date],
+        calendar: list[CalendarDay],
         result: FetchResult | None,
     ) -> _FrozenPlan:
-        """Publish the calendar and write the complete plan in one transaction.
+        """Publish the calendar, normalise it and write the complete plan in one
+        transaction.
 
         This is what makes "calendar published but plan missing" and "half a
-        plan" unreachable for new runs (§10.1).
+        plan" unreachable for new runs (§10.1). The normalised calendar rows
+        join that guarantee: a published calendar publication always has the
+        complete set of days a snapshot will later resolve through it.
         """
+        visible_dates = [day.trade_date for day in calendar if day.is_open]
+        hol_div_by_date = {day.trade_date: day.hol_div for day in calendar}
+
         with self._sessions() as session:
             run, task = _lock_run_and_task(session, run_id)
             _require_active(run, task)
@@ -461,6 +468,28 @@ class JQuantsSyncWorkflow:
                     publication.schema_fingerprint = _schema_fingerprint(result.rows)
                     publication.stats = {"pages": result.page_count, "rows": len(result.rows)}
 
+            # Guarded by existence rather than by the publish branch above: the
+            # legacy rebuild path arrives with an already-PUBLISHED calendar,
+            # and leaving it without rows would give its snapshot a calendar
+            # pointer that resolves to nothing.
+            already_written = session.scalar(
+                select(func.count())
+                .select_from(TradingCalendar)
+                .where(TradingCalendar.publication_id == calendar_publication_id)
+            )
+            if not already_written:
+                session.add_all(
+                    TradingCalendar(
+                        publication_id=calendar_publication_id,
+                        market=MARKET_TSE,
+                        trade_date=day.trade_date,
+                        is_open=day.is_open,
+                        session=day.session,
+                        hol_div=day.hol_div,
+                    )
+                    for day in calendar
+                )
+
             for ordinal, dates in enumerate(chunks):
                 batch = SyncBatch(
                     sync_run_id=run_id,
@@ -477,7 +506,7 @@ class JQuantsSyncWorkflow:
                         sync_run_id=run_id,
                         sync_batch_id=batch.id,
                         trade_date=item,
-                        source_calendar_code="1",
+                        source_calendar_code=hol_div_by_date[item],
                         status=SyncTargetStatus.PENDING,
                     )
                     for item in dates
@@ -1479,11 +1508,12 @@ def _bar_record(
 
 
 def _calendar_dates(rows: list[dict[str, Any]]) -> list[date]:
-    result = []
-    for row in rows:
-        if row.get("HolDiv") == "1" and row.get("Date"):
-            result.append(date.fromisoformat(str(row["Date"])))
-    return sorted(set(result))
+    """The dates this run should fetch: every day the market was open.
+
+    Half-day sessions (HolDiv=2) count — they trade, and skipping them is what
+    left a hole in the data 03 shipped.
+    """
+    return [day.trade_date for day in normalize_calendar(rows) if day.is_open]
 
 
 def _bar_values(row: dict[str, Any]) -> dict[str, Decimal | None]:

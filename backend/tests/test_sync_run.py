@@ -45,6 +45,21 @@ def _bars_publications(session, run_id: uuid.UUID) -> list[EndpointPublication]:
     )
 
 
+def test_half_day_trading_dates_are_targeted(make_workflow):
+    """HolDiv=2 (東証半日立会日) is a trading day with real bars.
+
+    03 only accepted HolDiv=1, so these dates were never fetched at all.
+    """
+    half_day = JANUARY[3]
+    adapter = FakeAdapter(trading_dates=JANUARY, half_days={half_day})
+    workflow = make_workflow(adapter, batch_size=5)
+    run_id = workflow.start().id
+
+    workflow.execute(run_id)
+
+    assert half_day in adapter.bar_requests
+
+
 def test_twelve_dates_publish_as_three_batch_generations(make_workflow, session_factory):
     """§18.1 item 1: one run, three sequential bars publications."""
     adapter = FakeAdapter(trading_dates=JANUARY)

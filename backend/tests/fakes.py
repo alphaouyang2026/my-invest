@@ -40,6 +40,8 @@ class FakeAdapter:
         self,
         *,
         trading_dates: list[date],
+        half_days: set[date] | None = None,
+        closed_dates: list[date] | None = None,
         bars: Callable[[date], list[dict[str, Any]]] | None = None,
         master_rows: list[dict[str, Any]] | None = None,
         fail_dates: set[date] | None = None,
@@ -47,6 +49,8 @@ class FakeAdapter:
         persistent_failure: bool = True,
     ) -> None:
         self.trading_dates = trading_dates
+        self.half_days = set(half_days or ())
+        self.closed_dates = list(closed_dates or ())
         self._bars = bars or (lambda d: [bar_row("13010", d)])
         self._master_rows = master_rows if master_rows is not None else [{"Code": "13010", "Mkt": "0111"}]
         self.fail_dates = set(fail_dates or ())
@@ -58,7 +62,12 @@ class FakeAdapter:
 
     def fetch_calendar(self) -> FetchResult:
         self.calendar_requests += 1
-        rows = [{"Date": item.isoformat(), "HolDiv": "1"} for item in self.trading_dates]
+        rows = [
+            {"Date": item.isoformat(), "HolDiv": "2" if item in self.half_days else "1"}
+            for item in self.trading_dates
+        ]
+        rows.extend({"Date": item.isoformat(), "HolDiv": "0"} for item in self.closed_dates)
+        rows.sort(key=lambda row: row["Date"])
         return FetchResult(rows=rows, pages=[{"data": rows}])
 
     def fetch_daily_bars(self, trade_date: str) -> FetchResult:

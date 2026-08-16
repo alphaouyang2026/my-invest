@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -271,6 +272,39 @@ class RawSourcePage(Base):
     payload: Mapped[dict] = mapped_column(JSONB)
     content_hash: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TradingCalendar(Base):
+    """One publication owns a complete calendar; a revision never touches the
+    rows an earlier snapshot resolves to.
+
+    Bars need three tables to dedupe versions because they are enormous and
+    mostly unchanged run to run. A calendar is ~250 rows a year, so copying the
+    whole set per publication costs nothing and lets a snapshot resolve it
+    through the `calendar_publication_id` pointer it already carries — no
+    second `publish_sequence` resolution path.
+    """
+
+    __tablename__ = "trading_calendar"
+    __table_args__ = (
+        UniqueConstraint("publication_id", "market", "trade_date", name="uq_trading_calendar_day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    publication_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("endpoint_publications.id"), nullable=False, index=True
+    )
+    # The source calendar carries no market dimension. "TSE" is the honest
+    # label: HolDiv=3 means the OSE trades while TSE cash equities do not, so
+    # naming the row TSE is what makes `is_open` true of anything.
+    market: Mapped[str] = mapped_column(String(20), nullable=False, default="TSE")
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    session: Mapped[str | None] = mapped_column(String(20))
+    # Kept verbatim so a code we don't recognise stays visible in the data
+    # rather than being flattened into "closed" with no trace.
+    hol_div: Mapped[str] = mapped_column(String(10), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
