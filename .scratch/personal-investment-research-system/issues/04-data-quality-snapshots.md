@@ -33,7 +33,8 @@
 - `market` 硬编码 `"TSE"`（源日历本身不区分市场；填 `"JPX"` 会让 `HolDiv=3` 那些行的 `is_open` 无论填什么都是错的）。`session` 从 `HolDiv` 推导——那是源头给出的唯一真实 session 信息。
 - **顺带修掉 03 的漏数据**：同步目标日期判定从 `HolDiv == "1"`（`jquants_sync_workflow.py:1484`）改为 `in {"1","2"}`。半日交易日是有真实成交的交易日，此前从未进入过同步目标；因本票要 purge 重同步，缺失 K 线自动补齐。不修的话，交易日历一致性规则会把我们自己的 bug 报成数据质量问题。
 - `CalendarPort` 是 Protocol，绑定到某个 `calendar_publication_id`（而非整个 `DataSnapshot` 对象）——质量 pass 用本次 plan 的 publication、下游消费方用 `snapshot.calendar_publication_id`，同一条构造路径，也解开了"pass 运行时快照尚不存在"的先后问题。方法约为 `is_open` / `previous_open` / `next_open` / `window_back` / `open_days_between`。
-- 覆盖范围外抛 `CalendarCoverageError`，**绝不返回 `None`、绝不外推**。Free 日历窗口永远止于约 12 周前，外推会在日本节假日上凭空造出交易日，静默污染 05 的动量窗口与之后每一次回测。
+- `window_back(end, n)` 返回**半开区间 `[.., end)`**——`end` 之前的 n 个开放交易日，**不含 `end` 当天**。决策日当天的价格不能进入信号，含进去就是前视偏差。这条语义绑住 05 的 20/21/126 日窗口，差一天会让所有回测结果整体偏移。
+- 覆盖范围外抛 `CalendarCoverageError`，**绝不返回 `None`、绝不外推**。窗口向前数不满 n 天（Free 日历只有约 2 年，而 126+21 交易日约 7 个月，靠近覆盖起点必然数不满）同样抛错，不返回残缺窗口。Free 日历窗口永远止于约 12 周前，外推会在日本节假日上凭空造出交易日，静默污染 05 的动量窗口与之后每一次回测。
 - bar 的 `session` 保持 `"full_day"` 不变（含义是"非日内切分"，非"完整长度时段"；`/v2/equities/bars/daily` 本身也无半日标识）。一致性规则**只比对 `is_open`**，两个 `session` 是不同词汇表，写进文档。把日历事实塞进 bar 身份键会让日历修订改变 bar 身份。
 
 **质量规则：执行位置**

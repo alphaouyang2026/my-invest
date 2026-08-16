@@ -11,6 +11,61 @@ from datetime import date
 from typing import Any, Callable
 
 from app.integrations.jquants import FetchResult, JQuantsError
+from app.services.calendar_normalization import CalendarDay
+from app.services.calendar_port import CalendarCoverageError
+
+
+class InMemoryCalendarPort:
+    """A deliberately naive CalendarPort, implemented independently.
+
+    It is an oracle, not a shortcut: the port tests run the same assertions
+    against this list-scanning version and the production bisect one, so a
+    disagreement means one of them is wrong. Sharing the query code would make
+    that cross-check vacuous. It also lets later pool/window work be tested
+    without standing up a sync run.
+    """
+
+    def __init__(self, days: list[CalendarDay]) -> None:
+        self._days = sorted(days, key=lambda item: item.trade_date)
+        self._open = [day.trade_date for day in self._days if day.is_open]
+
+    def _check(self, day: date) -> None:
+        if not self._days or not (self._days[0].trade_date <= day <= self._days[-1].trade_date):
+            raise CalendarCoverageError(f"{day.isoformat()} is outside the calendar's coverage")
+
+    def is_open(self, day: date) -> bool:
+        self._check(day)
+        return any(item.trade_date == day and item.is_open for item in self._days)
+
+    def previous_open(self, day: date) -> date:
+        self._check(day)
+        earlier = [item for item in self._open if item < day]
+        if not earlier:
+            raise CalendarCoverageError(f"No open trading day before {day.isoformat()} in coverage")
+        return earlier[-1]
+
+    def next_open(self, day: date) -> date:
+        self._check(day)
+        later = [item for item in self._open if item > day]
+        if not later:
+            raise CalendarCoverageError(f"No open trading day after {day.isoformat()} in coverage")
+        return later[0]
+
+    def window_back(self, end: date, count: int) -> list[date]:
+        if count < 0:
+            raise ValueError("count must not be negative")
+        self._check(end)
+        earlier = [item for item in self._open if item < end]
+        if len(earlier) < count:
+            raise CalendarCoverageError(
+                f"Only {len(earlier)} open trading days precede {end.isoformat()}; {count} requested"
+            )
+        return earlier[len(earlier) - count :]
+
+    def open_days_between(self, start: date, end: date) -> list[date]:
+        self._check(start)
+        self._check(end)
+        return [item for item in self._open if start <= item <= end]
 
 
 def bar_row(code: str, trade_date: date, close: float = 10) -> dict[str, Any]:
