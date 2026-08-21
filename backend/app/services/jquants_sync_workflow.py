@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.integrations.jquants import FetchResult, JQuantsAdapter, JQuantsError
@@ -41,6 +41,9 @@ from app.models.market_data import (
     InstrumentMasterSnapshotMember,
     PublicationBarObservation,
     PublicationStatus,
+    QualityEvaluation,
+    QualityEvaluationKind,
+    QualityEvaluationStatus,
     RawSourcePage,
     SyncBatch,
     SyncBatchStatus,
@@ -50,10 +53,14 @@ from app.models.market_data import (
     SyncRunStatus,
     SyncTargetDate,
     SyncTargetStatus,
+    TradingCalendar,
     publish_sequence_seq,
 )
 from app.models.task import Task, TaskStatus
-from app.services import snapshot_reader
+from app.services import quality_pass, snapshot_reader, source_state
+from app.services.calendar_normalization import MARKET_TSE, CalendarDay, normalize_calendar
+from app.services.calendar_port import DbCalendarPort
+from app.services.quality_rules import QualityPolicy, evaluate_row_local, policy_snapshot
 from app.services.sync_planner import (
     choose_target_dates,
     chunk_target_dates,
@@ -203,12 +210,14 @@ class JQuantsSyncWorkflow:
         adapter: JQuantsAdapter | None = None,
         *,
         policy: SyncPolicy = SyncPolicy(),
+        quality_policy: QualityPolicy = QualityPolicy(),
         source: str = "jquants",
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._sessions = session_factory
         self._adapter = adapter
         self._policy = policy
+        self._quality_policy = quality_policy
         self._source = source
         self._now = now
 
@@ -218,10 +227,13 @@ class JQuantsSyncWorkflow:
         """Create the one-to-one SyncRun + Task under the source lock.
 
         Returns the existing run when one is already active or when the same
-        idempotency key was used before — never a second active run.
+        idempotency key was used before — never a second active run. Refuses
+        outright while a re-validation holds the source: that is the other half
+        of the exclusion re-validation asks for, and queueing behind it would
+        leave two things claiming the source at once.
         """
         with self._sessions() as session:
-            _lock_source(session, self._source)
+            source_state.lock_source(session, self._source)
 
             if idempotency_key:
                 existing = session.scalar(
@@ -233,16 +245,15 @@ class JQuantsSyncWorkflow:
                 if existing:
                     return self._view(session, existing)
 
-            active = session.scalar(
-                select(SyncRun).where(
-                    SyncRun.source == self._source,
-                    SyncRun.status.in_(
-                        [SyncRunStatus.QUEUED, SyncRunStatus.RUNNING, SyncRunStatus.CANCELLING]
-                    ),
-                )
-            )
+            active = source_state.active_sync_run(session, self._source)
             if active:
                 return self._view(session, active)
+
+            if source_state.active_revalidation(session, self._source) is not None:
+                raise SyncConflict(
+                    "A re-validation is running for this source; sync is unavailable "
+                    "until it finishes"
+                )
 
             task = Task(task_type="jquants_sync", payload={}, progress={})
             session.add(task)
@@ -289,7 +300,7 @@ class JQuantsSyncWorkflow:
     def resume(self, run_id: uuid.UUID) -> SyncRunView:
         """Re-queue the *same* Task against the persisted checkpoint (§13.3)."""
         with self._sessions() as session:
-            _lock_source(session, self._source)
+            source_state.lock_source(session, self._source)
             run, task = _lock_run_and_task(session, run_id)
 
             if task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
@@ -302,6 +313,49 @@ class JQuantsSyncWorkflow:
             if run.plan_fingerprint:
                 _reset_unpublished_batches(session, run)
 
+            task.status = TaskStatus.QUEUED
+            task.error = None
+            task.started_at = None
+            task.finished_at = None
+
+            run.status = SyncRunStatus.QUEUED
+            run.cancel_requested_at = None
+            run.finished_at = None
+            run.error_code = None
+            run.error_summary = None
+            session.commit()
+            return self._view(session, run)
+
+    def force_retry(self, run_id: uuid.UUID) -> SyncRunView:
+        """Revive a run the worker gave up on, attempt counter and all.
+
+        The counter records how many times a worker *picked the task up*, not
+        how many times anything failed — a graceful restart consumes one just
+        as a crash does — so a run can reach the cap with nothing wrong with
+        it. Deliberately a separate command from `resume`: continuing a run is
+        routine, overturning the verdict the system already reached is not, and
+        the caller should have looked at why before doing it.
+
+        There is no second cap. A human confirming each time is the throttle;
+        a number on top of that would only build the dead end again.
+        """
+        with self._sessions() as session:
+            source_state.lock_source(session, self._source)
+            run, task = _lock_run_and_task(session, run_id)
+
+            if task.status in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
+                raise SyncConflict("Sync run is already queued or running")
+            if run.status in {SyncRunStatus.SUCCEEDED, SyncRunStatus.NO_CHANGE}:
+                # Re-judging finished data is re-validation's job (ticket 16).
+                raise SyncConflict("A completed run cannot be retried; re-validate instead")
+
+            self._validate_calendar_checkpoint(session, run)
+            if run.plan_fingerprint:
+                _reset_unpublished_batches(session, run)
+
+            # Both halves together: a terminal run with a cleared counter is a
+            # state nothing else in the system is written against.
+            task.attempt_count = 0
             task.status = TaskStatus.QUEUED
             task.error = None
             task.started_at = None
@@ -394,8 +448,7 @@ class JQuantsSyncWorkflow:
         publication_id = self._begin_publication(run_id, CALENDAR_ENDPOINT, {}, scope_ordinal=0)
         result = self._fetch(lambda: self._adapter.fetch_calendar(), "calendar")
         self._store_pages(publication_id, result.pages)
-        visible_dates = _calendar_dates(result.rows)
-        return self._freeze_plan(run_id, publication_id, visible_dates, result)
+        return self._freeze_plan(run_id, publication_id, normalize_calendar(result.rows), result)
 
     def _freeze_plan_from_raw_pages(self, run_id: uuid.UUID) -> _FrozenPlan:
         """Legacy compatibility only: a PUBLISHED calendar with no plan.
@@ -424,20 +477,26 @@ class JQuantsSyncWorkflow:
                     raise SyncInvariantError("Calendar raw page payload is unreadable; cannot rebuild the plan")
                 rows.extend(data)
             publication_id = publication.id
-        return self._freeze_plan(run_id, publication_id, _calendar_dates(rows), None)
+        return self._freeze_plan(run_id, publication_id, normalize_calendar(rows), None)
 
     def _freeze_plan(
         self,
         run_id: uuid.UUID,
         calendar_publication_id: uuid.UUID,
-        visible_dates: list[date],
+        calendar: list[CalendarDay],
         result: FetchResult | None,
     ) -> _FrozenPlan:
-        """Publish the calendar and write the complete plan in one transaction.
+        """Publish the calendar, normalise it and write the complete plan in one
+        transaction.
 
         This is what makes "calendar published but plan missing" and "half a
-        plan" unreachable for new runs (§10.1).
+        plan" unreachable for new runs (§10.1). The normalised calendar rows
+        join that guarantee: a published calendar publication always has the
+        complete set of days a snapshot will later resolve through it.
         """
+        visible_dates = [day.trade_date for day in calendar if day.is_open]
+        hol_div_by_date = {day.trade_date: day.hol_div for day in calendar}
+
         with self._sessions() as session:
             run, task = _lock_run_and_task(session, run_id)
             _require_active(run, task)
@@ -461,6 +520,28 @@ class JQuantsSyncWorkflow:
                     publication.schema_fingerprint = _schema_fingerprint(result.rows)
                     publication.stats = {"pages": result.page_count, "rows": len(result.rows)}
 
+            # Guarded by existence rather than by the publish branch above: the
+            # legacy rebuild path arrives with an already-PUBLISHED calendar,
+            # and leaving it without rows would give its snapshot a calendar
+            # pointer that resolves to nothing.
+            already_written = session.scalar(
+                select(func.count())
+                .select_from(TradingCalendar)
+                .where(TradingCalendar.publication_id == calendar_publication_id)
+            )
+            if not already_written:
+                session.add_all(
+                    TradingCalendar(
+                        publication_id=calendar_publication_id,
+                        market=MARKET_TSE,
+                        trade_date=day.trade_date,
+                        is_open=day.is_open,
+                        session=day.session,
+                        hol_div=day.hol_div,
+                    )
+                    for day in calendar
+                )
+
             for ordinal, dates in enumerate(chunks):
                 batch = SyncBatch(
                     sync_run_id=run_id,
@@ -477,7 +558,7 @@ class JQuantsSyncWorkflow:
                         sync_run_id=run_id,
                         sync_batch_id=batch.id,
                         trade_date=item,
-                        source_calendar_code="1",
+                        source_calendar_code=hol_div_by_date[item],
                         status=SyncTargetStatus.PENDING,
                     )
                     for item in dates
@@ -616,6 +697,11 @@ class JQuantsSyncWorkflow:
     ) -> None:
         """Record what this publication saw — every returned row, UNCHANGED
         included, so the snapshot can resolve versions by sequence alone."""
+        # Every row here shares `trade_date` (enforced below), so the business
+        # key reduces to the bar record. Checked while both rows are still in
+        # hand: the observation upsert further down is keyed by
+        # (publication, bar record) and would quietly keep only the last one.
+        seen: set[uuid.UUID] = set()
         with self._sessions() as session:
             for row in rows:
                 code = str(_required(row, "Code"))
@@ -626,6 +712,11 @@ class JQuantsSyncWorkflow:
                     )
                 instrument = _instrument(session, self._source, code)
                 record = _bar_record(session, self._source, instrument.instrument_id, row_date)
+                if record.id in seen:
+                    raise ValueError(
+                        f"J-Quants returned {code} twice for {row_date}; the batch contradicts itself"
+                    )
+                seen.add(record.id)
                 values = _bar_values(row)
                 content_hash = _hash(values)
 
@@ -644,8 +735,18 @@ class JQuantsSyncWorkflow:
                     version = existing_version
                     version.last_seen_at = self._now()
                 else:
+                    # Evaluated here, once, because the verdict is a pure
+                    # function of `values` — the same content reaching us again
+                    # reuses the row above and carries this answer with it.
+                    quality_status, quality_rules = evaluate_row_local(
+                        values, self._quality_policy
+                    )
                     version = BarVersion(
-                        bar_record_id=record.id, content_hash=content_hash, **values
+                        bar_record_id=record.id,
+                        content_hash=content_hash,
+                        quality_status=quality_status,
+                        quality_rules=quality_rules,
+                        **values,
                     )
                     session.add(version)
                     session.flush()
@@ -752,8 +853,65 @@ class JQuantsSyncWorkflow:
             return self._complete_without_bars(run_id, plan, mode)
 
         self._check_cancelled(run_id)
-        master_snapshot_id = self._ensure_master(run_id)
-        return self._activate_snapshot(run_id, plan, master_snapshot_id)
+        master_snapshot_id = self._ensure_master(run_id, plan)
+        evaluation = self._evaluate_quality(run_id, plan)
+        return self._activate_snapshot(run_id, plan, master_snapshot_id, evaluation)
+
+    def _evaluate_quality(self, run_id: uuid.UUID, plan: _FrozenPlan) -> _Evaluation:
+        """Run the contextual rules and report whether the snapshot is usable.
+
+        A fresh evaluation row per attempt, rather than one per run: a run that
+        reaches this phase, writes its findings and then fails at activation is
+        resumable, and re-running the pass under the same anchor would collide
+        with the findings the first attempt already wrote.
+
+        The failure path records that the pass produced no verdict and re-raises
+        rather than deciding anything. A crashed evaluator said neither "the
+        data is fine" nor "the data is bad", and writing ineligible would be
+        indistinguishable from having checked. Letting the Task fail keeps the
+        two apart, and leaves the previous snapshot as head.
+        """
+        with self._sessions() as session:
+            run = session.get(SyncRun, run_id)
+            run.phase = SyncPhase.EVALUATING_QUALITY
+            evaluation = QualityEvaluation(
+                kind=QualityEvaluationKind.SYNC,
+                source=self._source,
+                sync_run_id=run_id,
+                status=QualityEvaluationStatus.RUNNING,
+                policy=policy_snapshot(self._quality_policy),
+            )
+            session.add(evaluation)
+            session.flush()
+            evaluation_id = evaluation.id
+            session.commit()
+
+        calendar = DbCalendarPort(self._sessions, plan.calendar_publication_id)
+        try:
+            with self._sessions() as session:
+                outcome = quality_pass.evaluate(
+                    session,
+                    evaluation_id=evaluation_id,
+                    scope=quality_pass.RunScope(run_id),
+                    source=self._source,
+                    calendar=calendar,
+                    calendar_publication_id=plan.calendar_publication_id,
+                    policy=self._quality_policy,
+                )
+                session.commit()
+        except Exception as exc:
+            with self._sessions() as session:
+                failed = session.get(QualityEvaluation, evaluation_id)
+                failed.status = QualityEvaluationStatus.FAILED
+                failed.error_summary = str(exc)
+                session.commit()
+            raise
+
+        with self._sessions() as session:
+            done = session.get(QualityEvaluation, evaluation_id)
+            done.status = QualityEvaluationStatus.SUCCEEDED
+            session.commit()
+        return _Evaluation(id=evaluation_id, is_backtest_eligible=outcome.is_backtest_eligible)
 
     def _complete_without_bars(
         self, run_id: uuid.UUID, plan: _FrozenPlan, mode: SyncMode | None
@@ -772,38 +930,64 @@ class JQuantsSyncWorkflow:
             )
         return self._inherit_snapshot(run_id, plan)
 
-    def _ensure_master(self, run_id: uuid.UUID) -> uuid.UUID:
+    def _ensure_master(self, run_id: uuid.UUID, plan: _FrozenPlan) -> uuid.UUID:
+        """Fill in every weekly roster the calendar calls for, and return the
+        one dated at `coverage_end`.
+
+        A pool built for a past date needs the roster *of that date*: which
+        securities were listed, on which market tier, as what kind of security.
+        Fetching only today's roster and reusing it for history drops every
+        security delisted since (measured against the real feed: 88 gone and 28
+        demoted out of 1643 over two years) while smuggling in 35 that were not
+        yet Prime — the second half being look-ahead, not merely survivorship.
+
+        Weekly, because the decision day is weekly: a finer grain buys accuracy
+        only for mid-week delistings, at 4.7x the requests.
+        """
         with self._sessions() as session:
             run = session.get(SyncRun, run_id)
             run.phase = SyncPhase.MASTER
             session.commit()
-            existing = session.scalar(
-                select(InstrumentMasterSnapshot)
-                .join(
-                    EndpointPublication,
-                    EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
-                )
-                .where(
-                    InstrumentMasterSnapshot.sync_run_id == run_id,
-                    EndpointPublication.status == PublicationStatus.PUBLISHED,
-                )
-            )
-            if existing:
-                return existing.id
             coverage = _run_coverage_end(session, run_id)
 
         if coverage is None:
             raise SyncInvariantError("Bars were observed but no coverage date could be derived")
 
+        with self._sessions() as session:
+            targets = _roster_targets(session, plan.calendar_publication_id, coverage)
+            # What is already stored *is* the progress record. No checklist
+            # table: it could only ever be a shadow of these rows, and one that
+            # can disagree with them. An interrupted backfill resumes by
+            # recomputing this difference.
+            missing = sorted(targets - _stored_roster_dates(session, self._source))
+
+        for as_of in missing:
+            self._check_cancelled(run_id)
+            self._fetch_roster(run_id, as_of)
+
+        with self._sessions() as session:
+            snapshot_id = _roster_id_for(session, self._source, coverage)
+        if snapshot_id is None:
+            raise SyncInvariantError(f"No published roster exists for coverage end {coverage}")
+        return snapshot_id
+
+    def _fetch_roster(self, run_id: uuid.UUID, as_of: date) -> uuid.UUID:
         publication_id = self._begin_publication(
-            run_id, MASTER_ENDPOINT, {"date": coverage.isoformat()}, scope_ordinal=0
+            run_id,
+            MASTER_ENDPOINT,
+            {"date": as_of.isoformat()},
+            # The roster's own date identifies the scope, so `attempt` keeps
+            # meaning "retry of this roster" rather than "the Nth roster this
+            # run fetched" — which is what a fixed ordinal would have turned it
+            # into once a run fetches a hundred of them.
+            scope_ordinal=as_of.toordinal(),
         )
         try:
-            result = self._fetch(lambda: self._adapter.fetch_master(coverage.isoformat()), "master")
+            result = self._fetch(lambda: self._adapter.fetch_master(as_of.isoformat()), "master")
             if not result.rows:
                 raise ValueError("J-Quants master response was empty")
             self._store_pages(publication_id, result.pages)
-            snapshot_id = self._ingest_master(run_id, publication_id, coverage, result.rows)
+            snapshot_id = self._ingest_master(run_id, publication_id, as_of, result.rows)
         except Exception as exc:
             self._abandon_publication(publication_id, None, _error_code(exc), str(exc))
             raise
@@ -851,6 +1035,7 @@ class JQuantsSyncWorkflow:
                     "sector_17": row.get("S17"),
                     "sector_33": row.get("S33"),
                     "scale_category": row.get("ScaleCat"),
+                    "product_category": row.get("ProdCat"),
                     "inferred_security_class": security_class,
                     "classification_method": "jpx_code_suffix_v1",
                 }
@@ -866,7 +1051,11 @@ class JQuantsSyncWorkflow:
             return snapshot.id
 
     def _activate_snapshot(
-        self, run_id: uuid.UUID, plan: _FrozenPlan, master_snapshot_id: uuid.UUID
+        self,
+        run_id: uuid.UUID,
+        plan: _FrozenPlan,
+        master_snapshot_id: uuid.UUID,
+        evaluation: _Evaluation,
     ) -> SyncOutcome:
         """Create the immutable snapshot, switch the head, and terminate both
         SyncRun and Task — all in one transaction (§9.2)."""
@@ -906,6 +1095,7 @@ class JQuantsSyncWorkflow:
                 sync_run_id=run_id,
                 mode=run.mode,
                 bar_publish_sequence=cutoff,
+                master_publish_sequence=_master_cutoff(session),
                 calendar_publication_id=plan.calendar_publication_id,
                 master_snapshot_id=master_snapshot_id,
                 coverage_start=coverage.start,
@@ -913,10 +1103,15 @@ class JQuantsSyncWorkflow:
                 verified_start=plan.target_dates[0] if plan.target_dates else None,
                 verified_end=plan.target_dates[-1] if plan.target_dates else None,
                 plan_fingerprint=plan.fingerprint,
+                is_backtest_eligible=evaluation.is_backtest_eligible,
+                version=source_state.next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
-            _set_head(session, head, self._source, snapshot.id, self._now())
+            source_state.set_head(session, head, self._source, snapshot.id, self._now())
+            # Closed here, in the activation transaction, because until now the
+            # evaluation had judged data no snapshot existed for.
+            session.get(QualityEvaluation, evaluation.id).produced_snapshot_id = snapshot.id
 
             terminal = (
                 SyncRunStatus.SUCCEEDED
@@ -953,6 +1148,9 @@ class JQuantsSyncWorkflow:
                 sync_run_id=run_id,
                 mode=run.mode,
                 bar_publish_sequence=previous.bar_publish_sequence,
+                # Nothing was fetched, so the roster population is unchanged
+                # too; inheriting keeps the two snapshots resolving identically.
+                master_publish_sequence=previous.master_publish_sequence,
                 calendar_publication_id=plan.calendar_publication_id,
                 master_snapshot_id=previous.master_snapshot_id,
                 coverage_start=previous.coverage_start,
@@ -960,10 +1158,15 @@ class JQuantsSyncWorkflow:
                 verified_start=plan.target_dates[0] if plan.target_dates else None,
                 verified_end=plan.target_dates[-1] if plan.target_dates else None,
                 plan_fingerprint=plan.fingerprint,
+                # Nothing new was published, so this snapshot resolves to
+                # byte-identical bar versions. Re-running the pass would spend
+                # time proving an answer that cannot have changed.
+                is_backtest_eligible=previous.is_backtest_eligible,
+                version=source_state.next_snapshot_version(session, self._source),
             )
             session.add(snapshot)
             session.flush()
-            _set_head(session, head, self._source, snapshot.id, self._now())
+            source_state.set_head(session, head, self._source, snapshot.id, self._now())
 
             run.phase = SyncPhase.COMPLETE
             run.current_batch = None
@@ -1194,6 +1397,15 @@ class _FrozenPlan:
     calendar_publication_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class _Evaluation:
+    """What the quality phase hands to snapshot activation: the verdict, and
+    the row to attach the resulting snapshot to."""
+
+    id: uuid.UUID
+    is_backtest_eligible: bool
+
+
 class _CodedError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -1201,18 +1413,6 @@ class _CodedError(RuntimeError):
 
 
 # --------------------------------------------------------------------- helpers
-
-
-def _advisory_key(name: str) -> int:
-    digest = hashlib.sha256(name.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], "big", signed=True)
-
-
-def _lock_source(session: Session, source: str) -> None:
-    """Transaction-level lock giving concurrent HTTP writers a predictable
-    outcome. The partial unique index is the final guard; this only makes the
-    return value deterministic (§14)."""
-    session.execute(select(func.pg_advisory_xact_lock(_advisory_key(f"market-data-sync:{source}"))))
 
 
 def _lock_run_and_task(session: Session, run_id: uuid.UUID) -> tuple[SyncRun, Task]:
@@ -1247,16 +1447,6 @@ _TASK_TERMINAL = {
     SyncRunStatus.PARTIAL_FAILED: TaskStatus.FAILED,
     SyncRunStatus.CANCELLED: TaskStatus.CANCELLED,
 }
-
-
-def _set_head(
-    session: Session, head: DataSnapshotHead | None, source: str, snapshot_id: uuid.UUID, when: datetime
-) -> None:
-    if head is None:
-        session.add(DataSnapshotHead(source=source, snapshot_id=snapshot_id, updated_at=when))
-    else:
-        head.snapshot_id = snapshot_id
-        head.updated_at = when
 
 
 def is_resumable(
@@ -1383,6 +1573,98 @@ def _run_bars_cutoff(session: Session, run_id: uuid.UUID) -> int | None:
     )
 
 
+def _master_cutoff(session: Session) -> int | None:
+    """Highest published roster sequence at activation time.
+
+    Everything this run fetched is at or below it; anything a *later* sync
+    publishes is above, which is what keeps a finished snapshot from acquiring
+    new roster history after the fact.
+    """
+    return session.scalar(
+        select(func.max(EndpointPublication.publish_sequence)).where(
+            EndpointPublication.endpoint == MASTER_ENDPOINT,
+            EndpointPublication.status == PublicationStatus.PUBLISHED,
+        )
+    )
+
+
+def _roster_targets(
+    session: Session, calendar_publication_id: uuid.UUID, coverage_end: date
+) -> set[date]:
+    """Which dates the instrument roster should exist for: one per ISO week —
+    that week's last open trading day — plus `coverage_end` itself.
+
+    The week's *last* open day is deliberate: it is the decision day the pool
+    will be asked about, so the roster lands exactly where it is needed instead
+    of one to four days stale. `coverage_end` is added because the snapshot's
+    own `master_snapshot_id` points at it, and it need not be a week's end.
+    """
+    days = session.scalars(
+        select(TradingCalendar.trade_date)
+        .where(
+            TradingCalendar.publication_id == calendar_publication_id,
+            TradingCalendar.market == MARKET_TSE,
+            TradingCalendar.is_open.is_(True),
+            TradingCalendar.trade_date <= coverage_end,
+        )
+        .order_by(TradingCalendar.trade_date)
+    ).all()
+    weekly: dict[tuple[int, int], date] = {}
+    for day in days:
+        weekly[day.isocalendar()[:2]] = day
+    return set(weekly.values()) | {coverage_end}
+
+
+def _stored_roster_dates(session: Session, source: str) -> set[date]:
+    """Roster dates already held *usefully*.
+
+    Two exclusions, both there so the backfill heals rather than entrenches:
+
+    - unpublished ones, so an abandoned attempt does not make its date look
+      done and get skipped forever;
+    - ones whose members carry no product category, which is what every roster
+      ingested before that column existed looks like. Such a roster cannot
+      answer the identity question at all, and counting it as present would
+      leave a pool built on it silently empty — the failure mode with no error
+      message attached.
+    """
+    incomplete = exists().where(
+        InstrumentMasterSnapshotMember.snapshot_id == InstrumentMasterSnapshot.id,
+        InstrumentMasterSnapshotMember.product_category.is_(None),
+    )
+    return set(
+        session.scalars(
+            select(InstrumentMasterSnapshot.as_of_date)
+            .join(
+                EndpointPublication,
+                EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
+            )
+            .where(
+                InstrumentMasterSnapshot.source == source,
+                EndpointPublication.status == PublicationStatus.PUBLISHED,
+                ~incomplete,
+            )
+        ).all()
+    )
+
+
+def _roster_id_for(session: Session, source: str, as_of: date) -> uuid.UUID | None:
+    return session.scalar(
+        select(InstrumentMasterSnapshot.id)
+        .join(
+            EndpointPublication,
+            EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
+        )
+        .where(
+            InstrumentMasterSnapshot.source == source,
+            InstrumentMasterSnapshot.as_of_date == as_of,
+            EndpointPublication.status == PublicationStatus.PUBLISHED,
+        )
+        .order_by(EndpointPublication.publish_sequence.desc())
+        .limit(1)
+    )
+
+
 def _run_coverage_end(session: Session, run_id: uuid.UUID) -> date | None:
     """Latest trade date this run actually observed — the master's as-of date."""
     return session.scalar(
@@ -1479,11 +1761,12 @@ def _bar_record(
 
 
 def _calendar_dates(rows: list[dict[str, Any]]) -> list[date]:
-    result = []
-    for row in rows:
-        if row.get("HolDiv") == "1" and row.get("Date"):
-            result.append(date.fromisoformat(str(row["Date"])))
-    return sorted(set(result))
+    """The dates this run should fetch: every day the market was open.
+
+    Half-day sessions (HolDiv=2) count — they trade, and skipping them is what
+    left a hole in the data 03 shipped.
+    """
+    return [day.trade_date for day in normalize_calendar(rows) if day.is_open]
 
 
 def _bar_values(row: dict[str, Any]) -> dict[str, Decimal | None]:

@@ -27,9 +27,13 @@ type SyncRun = {
   actual_min?: string | null
   actual_max?: string | null
   resumable?: boolean
+  task_attempt?: number
+  error_code?: string | null
   error_summary?: string | null
   created_at?: string
 }
+
+const TERMINAL_FAILURES = new Set(['failed', 'partial_failed', 'cancelled'])
 
 type SourceStatus = {
   configuration: 'not_configured' | 'configured' | 'invalid'
@@ -44,8 +48,69 @@ const PHASE_LABELS: Record<string, string> = {
   planning: '冻结同步计划',
   bars: '同步日线',
   master: '同步证券主数据',
+  evaluating_quality: '校验数据质量',
   activating_snapshot: '激活数据快照',
   complete: '已完成',
+}
+
+/**
+ * Snapshots are produced by a successful sync, never created by hand, so this
+ * is a read-only view of what already exists.
+ */
+type Snapshot = {
+  id: string
+  version: number
+  coverage_start?: string | null
+  coverage_end?: string | null
+  verified_start?: string | null
+  verified_end?: string | null
+  evaluation_kind?: 'sync' | 'revalidate' | null
+  is_backtest_eligible: boolean
+  is_current: boolean
+  created_at?: string
+}
+
+/**
+ * A re-validation re-judges the newest data with today's rules. It always acts
+ * on the head — there is no snapshot to choose — so it belongs beside the
+ * section heading rather than on any one row.
+ */
+type Evaluation = {
+  id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  error_summary?: string | null
+}
+
+const EVALUATION_LABELS: Record<string, string> = {
+  queued: '重新校验排队中',
+  running: '正在重新校验',
+  succeeded: '重新校验已完成',
+  failed: '重新校验失败',
+}
+
+const EVALUATION_RUNNING = new Set(['queued', 'running'])
+
+type Finding = {
+  rule: string
+  trade_date: string
+  severity: 'warning' | 'rejecting'
+  affected_count: number
+  evaluated_count: number
+  sample: string[]
+}
+
+type SnapshotDetail = Snapshot & { findings: Finding[] }
+
+const RULE_LABELS: Record<string, string> = {
+  missing_critical_field: '关键字段缺失',
+  missing_optional_field: '非关键字段缺失',
+  negative_price: '价格为负',
+  negative_volume: '成交量为负',
+  ohlc_out_of_order: 'OHLC 逻辑错误',
+  calendar_disagreement: '日历修订后仍有行情',
+  missing_trading_day: '开市日缺 K 线',
+  no_trading_activity: '停牌/零成交',
+  adjustment_inconsistent: '复权比值无故突变',
 }
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,14 +126,21 @@ export default function DataCenter() {
   const [source, setSource] = useState<SourceStatus | null>(null)
   const [runs, setRuns] = useState<SyncRun[]>([])
   const [active, setActive] = useState<SyncRun | null>(null)
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [detail, setDetail] = useState<SnapshotDetail | null>(null)
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const status = await jsonFetch<SourceStatus>('/data-sync/status')
       const history = await jsonFetch<SyncRun[]>('/data-sync/runs')
+      const stored = await jsonFetch<Snapshot[]>('/snapshots')
+      const latest = await jsonFetch<Evaluation | null>('/quality/revalidations/latest')
       setSource(status)
       setRuns(history)
+      setSnapshots(stored)
+      setEvaluation(latest)
       setActive(history.find((run) => !terminal.has(run.status)) ?? null)
       setError(null)
     } catch (cause) {
@@ -80,11 +152,14 @@ export default function DataCenter() {
     const id = window.setTimeout(() => void refresh(), 0)
     return () => window.clearTimeout(id)
   }, [refresh])
+  // A re-validation is background work with no run card of its own, so it has
+  // to keep the same poll alive or its result would only appear on reload.
+  const revalidating = EVALUATION_RUNNING.has(evaluation?.status ?? '')
   useEffect(() => {
-    if (!active) return
+    if (!active && !revalidating) return
     const id = window.setInterval(() => void refresh(), 3000)
     return () => window.clearInterval(id)
-  }, [active, refresh])
+  }, [active, revalidating, refresh])
 
   async function command(path: string, failure: string) {
     try {
@@ -98,6 +173,30 @@ export default function DataCenter() {
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : failure)
+    }
+  }
+
+  async function revalidate() {
+    try {
+      setEvaluation(await jsonFetch<Evaluation>('/quality/revalidations', { method: 'POST' }))
+      setError(null)
+    } catch (cause) {
+      // A refusal names what is holding the source, which is the only useful
+      // thing to say here.
+      setError(cause instanceof Error ? cause.message : '无法开始重新校验')
+    }
+  }
+
+  async function inspect(snapshotId: string) {
+    if (detail?.id === snapshotId) {
+      setDetail(null)
+      return
+    }
+    try {
+      setDetail(await jsonFetch<SnapshotDetail>(`/snapshots/${snapshotId}`))
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法加载快照详情')
     }
   }
 
@@ -160,8 +259,103 @@ export default function DataCenter() {
             {' · '}{latest.actual_min ?? '—'} → {latest.actual_max ?? '—'}
           </p>
           {latest.error_summary && <p className="error">{latest.error_summary}</p>}
+
+          {/* Tucked away on purpose: this overturns a verdict the system
+              already reached, so it should not sit beside 立即同步. No
+              confirmation dialog — showing the reason and the attempt count
+              before the click is worth more than asking afterwards. */}
+          {TERMINAL_FAILURES.has(latest.status) && (
+            <details className="escalate">
+              <summary>更多</summary>
+              <p className="endpoint">
+                失败原因：{latest.error_summary ?? latest.error_code ?? '未记录'}
+                {' · '}已尝试 {latest.task_attempt ?? 0} 次
+              </p>
+              <p className="notice">
+                强制重试会清零尝试次数并让这次运行从检查点继续。已发布的批次不会重抓。
+              </p>
+              <button
+                className="secondary"
+                onClick={() => void command(`/data-sync/runs/${latest.id}/force-retry`, '无法强制重试')}
+              >强制重试</button>
+            </details>
+          )}
         </article>
       ) : <p className="empty">尚无同步运行。配置密钥后可开始首次回填。</p>}
+
+      {snapshots.length > 0 && <div className="snapshots">
+        {/* Re-validation always acts on the newest data, so it is one action
+            for the whole section rather than a button per row. */}
+        <div className="snapshots-heading">
+          <h3>数据快照</h3>
+          <div className="snapshots-actions">
+            {evaluation?.status && (
+              <span className={`evaluation evaluation-${evaluation.status}`}>
+                {EVALUATION_LABELS[evaluation.status] ?? evaluation.status}
+              </span>
+            )}
+            <button
+              className="secondary"
+              disabled={Boolean(active) || revalidating}
+              onClick={() => void revalidate()}
+            >重新校验</button>
+          </div>
+        </div>
+        {evaluation?.status === 'failed' && evaluation.error_summary && (
+          <p className="error">{evaluation.error_summary}</p>
+        )}
+        {snapshots.slice(0, 8).map((snapshot) => (
+          <div key={snapshot.id}>
+            <button
+              type="button"
+              className="snapshot-row"
+              aria-expanded={detail?.id === snapshot.id}
+              onClick={() => void inspect(snapshot.id)}
+            >
+              <strong>v{snapshot.version}</strong>
+              <span>{snapshot.coverage_start ?? '—'} → {snapshot.coverage_end ?? '—'}</span>
+              <span className={snapshot.is_backtest_eligible ? 'eligible' : 'ineligible'}>
+                {snapshot.is_backtest_eligible ? '可用于回测' : '不可用于回测'}
+              </span>
+              {/* Otherwise a version that appeared without any data being
+                  fetched has nothing explaining where it came from. */}
+              {snapshot.evaluation_kind === 'revalidate' && <span className="origin">重新校验</span>}
+              {snapshot.is_current && <span className="current">当前</span>}
+            </button>
+            {detail?.id === snapshot.id && (
+              <div className="snapshot-detail">
+                <p className="endpoint">
+                  {detail.evaluation_kind === 'revalidate'
+                    ? '重新校验：未向数据源取数，沿用上一份快照的数据与覆盖范围'
+                    : `本次核对范围 ${detail.verified_start ?? '—'} → ${detail.verified_end ?? '—'}`}
+                </p>
+                {detail.findings.length === 0 ? (
+                  <p className="empty">质量检查未发现问题。</p>
+                ) : (
+                  <table className="findings">
+                    <thead>
+                      <tr><th>规则</th><th>交易日</th><th>命中</th><th>样本</th></tr>
+                    </thead>
+                    <tbody>
+                      {detail.findings.map((finding) => (
+                        <tr
+                          key={`${finding.rule}-${finding.trade_date}`}
+                          className={finding.severity === 'rejecting' ? 'rejecting' : 'warning'}
+                        >
+                          <td>{RULE_LABELS[finding.rule] ?? finding.rule}</td>
+                          <td>{finding.trade_date}</td>
+                          <td>{finding.affected_count} / {finding.evaluated_count}</td>
+                          <td>{finding.sample.slice(0, 5).join('、') || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>}
 
       {runs.length > 0 && <div className="history">
         <h3>最近运行</h3>

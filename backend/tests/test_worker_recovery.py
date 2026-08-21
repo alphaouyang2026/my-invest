@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 from app.models.market_data import (
     EndpointPublication,
     PublicationStatus,
+    QualityEvaluation,
+    QualityEvaluationStatus,
     SyncRun,
     SyncRunStatus,
 )
@@ -159,6 +161,30 @@ def test_generic_orphan_task_without_a_sync_run_is_failed(session_factory):
         reloaded = session.get(Task, task_id)
         assert reloaded.status == TaskStatus.FAILED
         assert reloaded.error is not None
+
+
+def test_an_orphaned_revalidation_is_closed_out_rather_than_left_running(
+    make_workflow, revalidation_workflow, session_factory
+):
+    """Nothing here is resumable — the pass simply runs again — but a row stuck
+    at RUNNING would block every later re-validation, rebuilding the dead end
+    this ticket exists to remove."""
+    workflow = make_workflow(FakeAdapter(trading_dates=DATES[:2]))
+    workflow.execute(workflow.start().id)
+    evaluation_id = revalidation_workflow.start().id
+    with session_factory() as session:
+        evaluation = session.get(QualityEvaluation, evaluation_id)
+        evaluation.status = QualityEvaluationStatus.RUNNING
+        session.get(Task, evaluation.task_id).status = TaskStatus.RUNNING
+        session.commit()
+
+    recover_orphaned_tasks(session_factory)
+
+    with session_factory() as session:
+        assert session.get(QualityEvaluation, evaluation_id).status is (
+            QualityEvaluationStatus.FAILED
+        )
+    assert revalidation_workflow.start().id != evaluation_id
 
 
 def test_only_one_active_run_exists_per_source(sync_workflow, session_factory):

@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -27,7 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -68,6 +69,7 @@ class SyncPhase(str, enum.Enum):
     PLANNING = "planning"
     BARS = "bars"
     MASTER = "master"
+    EVALUATING_QUALITY = "evaluating_quality"
     ACTIVATING_SNAPSHOT = "activating_snapshot"
     COMPLETE = "complete"
 
@@ -93,6 +95,23 @@ class PublicationStatus(str, enum.Enum):
     PUBLISHED = "published"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class BarQualityStatus(str, enum.Enum):
+    """The row-local verdict on one bar version.
+
+    Lives with the model rather than with the rules because it is persisted
+    state, and `app.models` must not import `app.services`.
+    """
+
+    OK = "ok"
+    #: A non-critical field is missing — the row stays readable and stays
+    #: eligible. Each consumer decides what the gap costs it: stock-pool
+    #: construction ignores this status, because a missing high price says
+    #: nothing about whether the security could be bought.
+    EXCLUDED = "excluded"
+    #: The security cannot be honestly priced or traded on this date.
+    UNTRADABLE = "untradable"
 
 
 class BarObservationDisposition(str, enum.Enum):
@@ -274,6 +293,39 @@ class RawSourcePage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TradingCalendar(Base):
+    """One publication owns a complete calendar; a revision never touches the
+    rows an earlier snapshot resolves to.
+
+    Bars need three tables to dedupe versions because they are enormous and
+    mostly unchanged run to run. A calendar is ~250 rows a year, so copying the
+    whole set per publication costs nothing and lets a snapshot resolve it
+    through the `calendar_publication_id` pointer it already carries — no
+    second `publish_sequence` resolution path.
+    """
+
+    __tablename__ = "trading_calendar"
+    __table_args__ = (
+        UniqueConstraint("publication_id", "market", "trade_date", name="uq_trading_calendar_day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    publication_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("endpoint_publications.id"), nullable=False, index=True
+    )
+    # The source calendar carries no market dimension. "TSE" is the honest
+    # label: HolDiv=3 means the OSE trades while TSE cash equities do not, so
+    # naming the row TSE is what makes `is_open` true of anything.
+    market: Mapped[str] = mapped_column(String(20), nullable=False, default="TSE")
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    session: Mapped[str | None] = mapped_column(String(20))
+    # Kept verbatim so a code we don't recognise stays visible in the data
+    # rather than being flattened into "closed" with no trace.
+    hol_div: Mapped[str] = mapped_column(String(10), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Instrument(Base):
     __tablename__ = "instruments"
     __table_args__ = (UniqueConstraint("source", "source_code", name="uq_instrument_source_code"),)
@@ -317,6 +369,14 @@ class InstrumentMasterSnapshotMember(Base):
     sector_17: Mapped[str | None] = mapped_column(String(20))
     sector_33: Mapped[str | None] = mapped_column(String(20))
     scale_category: Mapped[str | None] = mapped_column(String(100))
+    #: The source's own security-type code (`ProdCat`): 011 domestic stock,
+    #: 013 REIT, 014 ETF, 021 foreign stock, 023 foreign ETF. Kept because it
+    #: is the only authoritative separator the feed offers — the five-digit
+    #: code suffix cannot tell an ETF from a common stock (13050, 89510 both
+    #: end in 0), and `market_code` cannot tell a foreign listing from a
+    #: domestic one inside Prime. NULL on rows ingested before this column
+    #: existed; the pool treats NULL as ineligible rather than guessing.
+    product_category: Mapped[str | None] = mapped_column(String(10))
     inferred_security_class: Mapped[str] = mapped_column(String(50))
     classification_method: Mapped[str] = mapped_column(String(100), default="jpx_code_suffix_v1")
     content_hash: Mapped[str] = mapped_column(String(64))
@@ -366,7 +426,18 @@ class BarVersion(Base):
     adjusted_close: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
     adjusted_volume: Mapped[Decimal | None] = mapped_column(Numeric(30, 8))
     adjustment_factor: Mapped[Decimal | None] = mapped_column(Numeric(24, 12))
-    quality_status: Mapped[str] = mapped_column(String(30), default="ok", nullable=False)
+    # Row-local quality only. Set once, at insert: the verdict is a pure
+    # function of this row's content, so reusing a version on an A -> B -> A
+    # revert carries the right answer with it. Contextual rules cannot satisfy
+    # that and live on the findings table instead.
+    quality_status: Mapped[BarQualityStatus] = mapped_column(
+        pg_enum(BarQualityStatus, "bar_quality_status"),
+        default=BarQualityStatus.OK,
+        nullable=False,
+    )
+    quality_rules: Mapped[list[str]] = mapped_column(
+        ARRAY(String(40)), default=list, nullable=False
+    )
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -415,6 +486,117 @@ class CurrentBar(Base):
     )
 
 
+class QualitySeverity(str, enum.Enum):
+    #: Recorded and queryable, but never affects whether a snapshot is usable.
+    WARNING = "warning"
+    #: Enough to make the run's snapshot ineligible for backtesting.
+    REJECTING = "rejecting"
+
+
+class QualityEvaluationKind(str, enum.Enum):
+    #: Ran as the final phase of a sync, over what that run published.
+    SYNC = "sync"
+    #: Ran on demand over the head snapshot, with today's rules.
+    REVALIDATE = "revalidate"
+
+
+class QualityEvaluationStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+#: A source may carry one of these at a time — a sync and a re-validation must
+#: never be in flight together, since each changes what the other is judging.
+ACTIVE_EVALUATION_STATUSES = frozenset(
+    {QualityEvaluationStatus.QUEUED, QualityEvaluationStatus.RUNNING}
+)
+
+
+class QualityEvaluation(Base):
+    """One pass of the contextual rules over one population of bars.
+
+    Findings hang off this rather than off a sync run, because a re-validation
+    has no run to hang them from and reusing the original run's id would
+    collide with the findings that run already wrote. Both producers make *an
+    evaluation*; the difference between them is `kind` and what `scope` the
+    pass was given.
+
+    Anchoring here rather than on the snapshot keeps the property 04 was
+    careful about: an evaluation that never reached snapshot activation still
+    leaves its reasons behind, with `produced_snapshot_id` left NULL.
+
+    For a re-validation this row is also the progress record — there is no
+    second state machine, because there are no phases to record: it is one set
+    of aggregate queries, with none of the calendar/batch/paging/rate-limit
+    machinery that makes `SyncRun` complicated.
+    """
+
+    __tablename__ = "quality_evaluation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[QualityEvaluationKind] = mapped_column(
+        pg_enum(QualityEvaluationKind, "quality_evaluation_kind"), nullable=False
+    )
+    #: Which market data source was judged. Derivable from `sync_run_id` for a
+    #: sync, but a re-validation has none, and every other table that describes
+    #: a body of market data carries it.
+    source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    sync_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sync_runs.id"), index=True)
+    #: Set only for a re-validation, which is queued work of its own. A sync's
+    #: task is reachable through its run.
+    task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id"), unique=True)
+    produced_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_snapshots.id"), unique=True
+    )
+    #: The `QualityPolicy` this pass ran under. Today production never injects
+    #: one, so the code version says everything; from ticket 14 on, thresholds
+    #: become user-editable and the same code will produce different verdicts.
+    #: Recorded now because it costs one column, and because an evaluation
+    #: written before that lands can never have its thresholds reconstructed.
+    #: NULL means "written before evaluations recorded this".
+    policy: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[QualityEvaluationStatus] = mapped_column(
+        pg_enum(QualityEvaluationStatus, "quality_evaluation_status"),
+        default=QualityEvaluationStatus.QUEUED,
+        nullable=False,
+    )
+    error_summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class QualityFinding(Base):
+    """One rule's verdict for one trade date within one evaluation.
+
+    Aggregated per date because that is the grain the escalation threshold is
+    computed at, and because per-instrument rows would run to millions over two
+    years. `sample` keeps a capped list so an investigation has somewhere to
+    start; the row-local detail stays recoverable from `bar_versions`.
+    """
+
+    __tablename__ = "quality_findings"
+    __table_args__ = (
+        UniqueConstraint("evaluation_id", "rule", "trade_date", name="uq_quality_finding"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evaluation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("quality_evaluation.id"), nullable=False, index=True
+    )
+    rule: Mapped[str] = mapped_column(String(40), nullable=False)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    severity: Mapped[QualitySeverity] = mapped_column(
+        pg_enum(QualitySeverity, "quality_severity"), nullable=False
+    )
+    affected_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: The population the rule actually examined — the denominator behind any
+    #: escalation, kept so the decision can be re-checked rather than trusted.
+    evaluated_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sample: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DataSnapshot(Base):
     """Immutable research view created only when a whole run succeeds.
 
@@ -428,9 +610,23 @@ class DataSnapshot(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
-    sync_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sync_runs.id"), nullable=False)
-    mode: Mapped[SyncMode] = mapped_column(pg_enum(SyncMode, "sync_mode"), nullable=False)
+    #: NULL for a snapshot produced by a re-validation: it fetched nothing, so
+    #: claiming a run would be a lie, and the unique constraint would reject a
+    #: borrowed one anyway. `QualityEvaluation.produced_snapshot_id` is how
+    #: such a snapshot is traced back to what made it.
+    sync_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sync_runs.id"))
+    #: NULL for the same reason, and not merely for tidiness: `mode` is what
+    #: `_snapshot_watermarks` reads to decide when the next full reconcile is
+    #: due, so inheriting `initial` here would quietly postpone it.
+    mode: Mapped[SyncMode | None] = mapped_column(pg_enum(SyncMode, "sync_mode"))
     bar_publish_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    #: The same cutoff idea, for instrument rosters. A separate number because
+    #: rosters publish *after* the bars they accompany, so they are all beyond
+    #: `bar_publish_sequence` and reusing it would make every roster invisible.
+    #: One more cutoff on the one publish sequence, not a second visibility
+    #: mechanism. NULL on snapshots written before weekly rosters existed; those
+    #: had exactly one roster, and `master_snapshot_id` still identifies it.
+    master_publish_sequence: Mapped[int | None] = mapped_column(BigInteger)
     calendar_publication_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("endpoint_publications.id"), nullable=False
     )
@@ -442,6 +638,14 @@ class DataSnapshot(Base):
     verified_start: Mapped[date | None] = mapped_column(Date)
     verified_end: Mapped[date | None] = mapped_column(Date)
     plan_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Decided once, at creation, and never revisited. A snapshot a backtest
+    #: has already bound to must not have its verdict overturned by a later
+    #: rule change, and a run that produced no rejecting finding was clean at
+    #: the moment it was judged — which is the only moment that can be judged.
+    is_backtest_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: A counter for humans, per source. Deliberately not the global publish
+    #: sequence: gaps in that one would read as missing data.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

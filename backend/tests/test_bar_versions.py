@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app.models.market_data import (
     BarObservationDisposition,
+    BarQualityStatus,
     BarRecord,
     BarVersion,
     CurrentBar,
@@ -17,6 +18,7 @@ from app.models.market_data import (
     PublicationStatus,
     SyncRunStatus,
 )
+from app.services.quality_rules import QualityRule
 from tests.fakes import FakeAdapter, bar_row
 
 DATES = [date(2024, 3, 1), date(2024, 3, 4)]
@@ -65,6 +67,39 @@ def test_reverting_to_earlier_content_reuses_the_original_version(make_workflow,
         ).all()
         assert len(observations) == 3
         assert observations[-1].disposition == BarObservationDisposition.REVERTED
+
+
+def test_a_reused_version_still_carries_its_own_quality_verdict(make_workflow, session_factory):
+    """The reason row-local quality lives on BarVersion at all.
+
+    A defective bar, corrected, then reverted: the third run reuses the
+    original row, so its verdict has to have been a property of the content
+    rather than of the moment it was judged.
+    """
+
+    def defective(_: date) -> list[dict]:
+        row = bar_row(CODE, DATES[0], close=10)
+        row["C"] = None  # critical field missing
+        return [row]
+
+    def healthy(trade_date: date) -> list[dict]:
+        return [bar_row(CODE, trade_date, close=10)]
+
+    for bars in (defective, healthy, defective):
+        adapter = FakeAdapter(trading_dates=[DATES[0]], bars=bars)
+        workflow = make_workflow(adapter, batch_size=5)
+        workflow.execute(workflow.start().id)
+
+    with session_factory() as session:
+        record = _record(session)
+        versions = session.scalars(
+            select(BarVersion).where(BarVersion.bar_record_id == record.id)
+        ).all()
+        current = session.get(BarVersion, session.get(CurrentBar, record.id).bar_version_id)
+
+    assert len(versions) == 2, "the revert must reuse the original row"
+    assert current.quality_status is BarQualityStatus.UNTRADABLE
+    assert QualityRule.MISSING_CRITICAL_FIELD.value in current.quality_rules
 
 
 def test_unchanged_rows_are_observed_without_moving_the_pointer(make_workflow, session_factory):
