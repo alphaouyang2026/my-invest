@@ -35,3 +35,6 @@ pgdata/
 # then frontend `npm run generate:api`)
 /openapi.json
 frontend/lib/api/schema.d.ts
+
+# Rescued historical master responses (ticket 05 backfill archive)
+.master-backfill/

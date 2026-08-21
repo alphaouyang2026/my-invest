@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.integrations.jquants import FetchResult, JQuantsAdapter, JQuantsError
@@ -853,7 +853,7 @@ class JQuantsSyncWorkflow:
             return self._complete_without_bars(run_id, plan, mode)
 
         self._check_cancelled(run_id)
-        master_snapshot_id = self._ensure_master(run_id)
+        master_snapshot_id = self._ensure_master(run_id, plan)
         evaluation = self._evaluate_quality(run_id, plan)
         return self._activate_snapshot(run_id, plan, master_snapshot_id, evaluation)
 
@@ -930,38 +930,64 @@ class JQuantsSyncWorkflow:
             )
         return self._inherit_snapshot(run_id, plan)
 
-    def _ensure_master(self, run_id: uuid.UUID) -> uuid.UUID:
+    def _ensure_master(self, run_id: uuid.UUID, plan: _FrozenPlan) -> uuid.UUID:
+        """Fill in every weekly roster the calendar calls for, and return the
+        one dated at `coverage_end`.
+
+        A pool built for a past date needs the roster *of that date*: which
+        securities were listed, on which market tier, as what kind of security.
+        Fetching only today's roster and reusing it for history drops every
+        security delisted since (measured against the real feed: 88 gone and 28
+        demoted out of 1643 over two years) while smuggling in 35 that were not
+        yet Prime — the second half being look-ahead, not merely survivorship.
+
+        Weekly, because the decision day is weekly: a finer grain buys accuracy
+        only for mid-week delistings, at 4.7x the requests.
+        """
         with self._sessions() as session:
             run = session.get(SyncRun, run_id)
             run.phase = SyncPhase.MASTER
             session.commit()
-            existing = session.scalar(
-                select(InstrumentMasterSnapshot)
-                .join(
-                    EndpointPublication,
-                    EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
-                )
-                .where(
-                    InstrumentMasterSnapshot.sync_run_id == run_id,
-                    EndpointPublication.status == PublicationStatus.PUBLISHED,
-                )
-            )
-            if existing:
-                return existing.id
             coverage = _run_coverage_end(session, run_id)
 
         if coverage is None:
             raise SyncInvariantError("Bars were observed but no coverage date could be derived")
 
+        with self._sessions() as session:
+            targets = _roster_targets(session, plan.calendar_publication_id, coverage)
+            # What is already stored *is* the progress record. No checklist
+            # table: it could only ever be a shadow of these rows, and one that
+            # can disagree with them. An interrupted backfill resumes by
+            # recomputing this difference.
+            missing = sorted(targets - _stored_roster_dates(session, self._source))
+
+        for as_of in missing:
+            self._check_cancelled(run_id)
+            self._fetch_roster(run_id, as_of)
+
+        with self._sessions() as session:
+            snapshot_id = _roster_id_for(session, self._source, coverage)
+        if snapshot_id is None:
+            raise SyncInvariantError(f"No published roster exists for coverage end {coverage}")
+        return snapshot_id
+
+    def _fetch_roster(self, run_id: uuid.UUID, as_of: date) -> uuid.UUID:
         publication_id = self._begin_publication(
-            run_id, MASTER_ENDPOINT, {"date": coverage.isoformat()}, scope_ordinal=0
+            run_id,
+            MASTER_ENDPOINT,
+            {"date": as_of.isoformat()},
+            # The roster's own date identifies the scope, so `attempt` keeps
+            # meaning "retry of this roster" rather than "the Nth roster this
+            # run fetched" — which is what a fixed ordinal would have turned it
+            # into once a run fetches a hundred of them.
+            scope_ordinal=as_of.toordinal(),
         )
         try:
-            result = self._fetch(lambda: self._adapter.fetch_master(coverage.isoformat()), "master")
+            result = self._fetch(lambda: self._adapter.fetch_master(as_of.isoformat()), "master")
             if not result.rows:
                 raise ValueError("J-Quants master response was empty")
             self._store_pages(publication_id, result.pages)
-            snapshot_id = self._ingest_master(run_id, publication_id, coverage, result.rows)
+            snapshot_id = self._ingest_master(run_id, publication_id, as_of, result.rows)
         except Exception as exc:
             self._abandon_publication(publication_id, None, _error_code(exc), str(exc))
             raise
@@ -1009,6 +1035,7 @@ class JQuantsSyncWorkflow:
                     "sector_17": row.get("S17"),
                     "sector_33": row.get("S33"),
                     "scale_category": row.get("ScaleCat"),
+                    "product_category": row.get("ProdCat"),
                     "inferred_security_class": security_class,
                     "classification_method": "jpx_code_suffix_v1",
                 }
@@ -1068,6 +1095,7 @@ class JQuantsSyncWorkflow:
                 sync_run_id=run_id,
                 mode=run.mode,
                 bar_publish_sequence=cutoff,
+                master_publish_sequence=_master_cutoff(session),
                 calendar_publication_id=plan.calendar_publication_id,
                 master_snapshot_id=master_snapshot_id,
                 coverage_start=coverage.start,
@@ -1120,6 +1148,9 @@ class JQuantsSyncWorkflow:
                 sync_run_id=run_id,
                 mode=run.mode,
                 bar_publish_sequence=previous.bar_publish_sequence,
+                # Nothing was fetched, so the roster population is unchanged
+                # too; inheriting keeps the two snapshots resolving identically.
+                master_publish_sequence=previous.master_publish_sequence,
                 calendar_publication_id=plan.calendar_publication_id,
                 master_snapshot_id=previous.master_snapshot_id,
                 coverage_start=previous.coverage_start,
@@ -1539,6 +1570,98 @@ def _run_bars_cutoff(session: Session, run_id: uuid.UUID) -> int | None:
             EndpointPublication.endpoint == BARS_ENDPOINT,
             EndpointPublication.status == PublicationStatus.PUBLISHED,
         )
+    )
+
+
+def _master_cutoff(session: Session) -> int | None:
+    """Highest published roster sequence at activation time.
+
+    Everything this run fetched is at or below it; anything a *later* sync
+    publishes is above, which is what keeps a finished snapshot from acquiring
+    new roster history after the fact.
+    """
+    return session.scalar(
+        select(func.max(EndpointPublication.publish_sequence)).where(
+            EndpointPublication.endpoint == MASTER_ENDPOINT,
+            EndpointPublication.status == PublicationStatus.PUBLISHED,
+        )
+    )
+
+
+def _roster_targets(
+    session: Session, calendar_publication_id: uuid.UUID, coverage_end: date
+) -> set[date]:
+    """Which dates the instrument roster should exist for: one per ISO week —
+    that week's last open trading day — plus `coverage_end` itself.
+
+    The week's *last* open day is deliberate: it is the decision day the pool
+    will be asked about, so the roster lands exactly where it is needed instead
+    of one to four days stale. `coverage_end` is added because the snapshot's
+    own `master_snapshot_id` points at it, and it need not be a week's end.
+    """
+    days = session.scalars(
+        select(TradingCalendar.trade_date)
+        .where(
+            TradingCalendar.publication_id == calendar_publication_id,
+            TradingCalendar.market == MARKET_TSE,
+            TradingCalendar.is_open.is_(True),
+            TradingCalendar.trade_date <= coverage_end,
+        )
+        .order_by(TradingCalendar.trade_date)
+    ).all()
+    weekly: dict[tuple[int, int], date] = {}
+    for day in days:
+        weekly[day.isocalendar()[:2]] = day
+    return set(weekly.values()) | {coverage_end}
+
+
+def _stored_roster_dates(session: Session, source: str) -> set[date]:
+    """Roster dates already held *usefully*.
+
+    Two exclusions, both there so the backfill heals rather than entrenches:
+
+    - unpublished ones, so an abandoned attempt does not make its date look
+      done and get skipped forever;
+    - ones whose members carry no product category, which is what every roster
+      ingested before that column existed looks like. Such a roster cannot
+      answer the identity question at all, and counting it as present would
+      leave a pool built on it silently empty — the failure mode with no error
+      message attached.
+    """
+    incomplete = exists().where(
+        InstrumentMasterSnapshotMember.snapshot_id == InstrumentMasterSnapshot.id,
+        InstrumentMasterSnapshotMember.product_category.is_(None),
+    )
+    return set(
+        session.scalars(
+            select(InstrumentMasterSnapshot.as_of_date)
+            .join(
+                EndpointPublication,
+                EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
+            )
+            .where(
+                InstrumentMasterSnapshot.source == source,
+                EndpointPublication.status == PublicationStatus.PUBLISHED,
+                ~incomplete,
+            )
+        ).all()
+    )
+
+
+def _roster_id_for(session: Session, source: str, as_of: date) -> uuid.UUID | None:
+    return session.scalar(
+        select(InstrumentMasterSnapshot.id)
+        .join(
+            EndpointPublication,
+            EndpointPublication.id == InstrumentMasterSnapshot.publication_id,
+        )
+        .where(
+            InstrumentMasterSnapshot.source == source,
+            InstrumentMasterSnapshot.as_of_date == as_of,
+            EndpointPublication.status == PublicationStatus.PUBLISHED,
+        )
+        .order_by(EndpointPublication.publish_sequence.desc())
+        .limit(1)
     )
 
 

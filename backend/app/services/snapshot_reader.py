@@ -10,6 +10,7 @@ themselves (docs/design/jquants-continuous-batch-sync.md §9.1).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -33,13 +34,31 @@ class SnapshotCoverage:
     member_count: int
 
 
-def snapshot_member_query(source: str, bar_publish_sequence: int) -> Select:
+def snapshot_member_query(
+    source: str,
+    bar_publish_sequence: int,
+    *,
+    trade_dates: Sequence[date] | None = None,
+    instrument_ids: Sequence[uuid.UUID] | None = None,
+) -> Select:
     """Per bar record, the version visible at the given cutoff.
 
     DISTINCT ON keeps this a single index-friendly pass instead of a
     correlated max-subquery per record.
+
+    `trade_dates` and `instrument_ids` narrow the population *before* the
+    resolution, so a caller that wants twenty days of fifteen hundred
+    securities does not resolve two million rows and discard the rest.
+    Filtering the resulting subquery instead would be correct and unusably
+    slow — the mistake the quality pass already had to be rescued from.
+
+    Both land on `bar_records`, which is indexed on (source, trade_date,
+    instrument_id). Joining a caller's id list to the resolved subquery instead
+    leaves the planner free to re-run the resolution per id, and it does: the
+    same query took a second in one run and over twenty minutes in another,
+    on identical data, purely on which plan it picked.
     """
-    return (
+    query = (
         select(
             BarRecord.id.label("bar_record_id"),
             BarRecord.instrument_id,
@@ -59,6 +78,11 @@ def snapshot_member_query(source: str, bar_publish_sequence: int) -> Select:
         .distinct(BarRecord.id)
         .order_by(BarRecord.id, EndpointPublication.publish_sequence.desc())
     )
+    if trade_dates is not None:
+        query = query.where(BarRecord.trade_date.in_(list(trade_dates)))
+    if instrument_ids is not None:
+        query = query.where(BarRecord.instrument_id.in_(list(instrument_ids)))
+    return query
 
 
 def resolve_coverage(session: Session, source: str, bar_publish_sequence: int) -> SnapshotCoverage:

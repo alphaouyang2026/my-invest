@@ -264,6 +264,7 @@ class QualityRevalidationWorkflow:
                 sync_run_id=None,
                 mode=None,
                 bar_publish_sequence=subject.bar_publish_sequence,
+                master_publish_sequence=subject.master_publish_sequence,
                 calendar_publication_id=subject.calendar_publication_id,
                 master_snapshot_id=subject.master_snapshot_id,
                 coverage_start=subject.coverage_start,

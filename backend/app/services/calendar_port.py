@@ -106,6 +106,30 @@ class _CalendarQueries:
         return self._open_days[left:right]
 
 
+def load_calendar_days(
+    session: Session, publication_id, *, market: str = MARKET_TSE
+) -> list[CalendarDay]:
+    rows = session.scalars(
+        select(TradingCalendar)
+        .where(
+            TradingCalendar.publication_id == publication_id,
+            TradingCalendar.market == market,
+        )
+        .order_by(TradingCalendar.trade_date)
+    ).all()
+    if not rows:
+        raise CalendarCoverageError(f"Calendar publication {publication_id} has no {market} days")
+    return [
+        CalendarDay(
+            trade_date=row.trade_date,
+            hol_div=row.hol_div,
+            is_open=row.is_open,
+            session=row.session,
+        )
+        for row in rows
+    ]
+
+
 class DbCalendarPort(_CalendarQueries):
     """Reads the complete calendar owned by one publication.
 
@@ -121,26 +145,17 @@ class DbCalendarPort(_CalendarQueries):
         market: str = MARKET_TSE,
     ) -> None:
         with sessions() as session:
-            rows = session.scalars(
-                select(TradingCalendar)
-                .where(
-                    TradingCalendar.publication_id == publication_id,
-                    TradingCalendar.market == market,
-                )
-                .order_by(TradingCalendar.trade_date)
-            ).all()
-        if not rows:
-            raise CalendarCoverageError(
-                f"Calendar publication {publication_id} has no {market} days"
-            )
-        super().__init__(
-            [
-                CalendarDay(
-                    trade_date=row.trade_date,
-                    hol_div=row.hol_div,
-                    is_open=row.is_open,
-                    session=row.session,
-                )
-                for row in rows
-            ]
-        )
+            super().__init__(load_calendar_days(session, publication_id, market=market))
+
+
+class SessionCalendarPort(_CalendarQueries):
+    """The same port over a session the caller already holds.
+
+    Exists because a request handler is given its session by dependency
+    injection and has no factory to hand over; the alternative — opening a
+    second connection inside a request that already has one — is how a request
+    ends up reading across two transactions.
+    """
+
+    def __init__(self, session: Session, publication_id, *, market: str = MARKET_TSE) -> None:
+        super().__init__(load_calendar_days(session, publication_id, market=market))

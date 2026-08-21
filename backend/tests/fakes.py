@@ -68,6 +68,39 @@ class InMemoryCalendarPort:
         return [item for item in self._open if start <= item <= end]
 
 
+def full_bar_row(
+    code: str,
+    trade_date: date,
+    *,
+    close: float = 1000,
+    volume: float = 1000,
+    turnover: float | None = None,
+) -> dict[str, Any]:
+    """A row with every field the quality rules look at, so the resulting bar
+    version is `ok` rather than `untradable`.
+
+    `bar_row` deliberately omits the adjusted series, which makes its bars
+    untradable — fine for sync-plumbing tests, useless for anything that has to
+    decide whether a security was investable.
+    """
+    return {
+        "Code": code,
+        "Date": trade_date.isoformat(),
+        "O": close,
+        "H": close + 1,
+        "L": close - 1,
+        "C": close,
+        "Vo": volume,
+        "Va": close * volume if turnover is None else turnover,
+        "AdjO": close,
+        "AdjH": close + 1,
+        "AdjL": close - 1,
+        "AdjC": close,
+        "AdjVo": volume,
+        "AdjFactor": 1,
+    }
+
+
 def bar_row(code: str, trade_date: date, close: float = 10) -> dict[str, Any]:
     return {
         "Code": code,
@@ -98,7 +131,7 @@ class FakeAdapter:
         half_days: set[date] | None = None,
         closed_dates: list[date] | None = None,
         bars: Callable[[date], list[dict[str, Any]]] | None = None,
-        master_rows: list[dict[str, Any]] | None = None,
+        master_rows: list[dict[str, Any]] | Callable[[date], list[dict[str, Any]]] | None = None,
         fail_dates: set[date] | None = None,
         fail_master: bool = False,
         persistent_failure: bool = True,
@@ -107,13 +140,19 @@ class FakeAdapter:
         self.half_days = set(half_days or ())
         self.closed_dates = list(closed_dates or ())
         self._bars = bars or (lambda d: [bar_row("13010", d)])
-        self._master_rows = master_rows if master_rows is not None else [{"Code": "13010", "Mkt": "0111"}]
+        # A callable lets a test vary the roster by date, which is the whole
+        # point of point-in-time membership: a list would make every historical
+        # week look like today.
+        self._master_rows = master_rows if master_rows is not None else [
+            {"Code": "13010", "Mkt": "0111", "ProdCat": "011"}
+        ]
         self.fail_dates = set(fail_dates or ())
         self.fail_master = fail_master
         self._persistent = persistent_failure
         self.bar_requests: list[date] = []
         self.calendar_requests = 0
         self.master_requests = 0
+        self.master_requested_dates: list[date] = []
 
     def fetch_calendar(self) -> FetchResult:
         self.calendar_requests += 1
@@ -137,8 +176,14 @@ class FakeAdapter:
 
     def fetch_master(self, as_of_date: str) -> FetchResult:
         self.master_requests += 1
+        self.master_requested_dates.append(date.fromisoformat(as_of_date))
         if self.fail_master:
             if not self._persistent:
                 self.fail_master = False
             raise JQuantsError("master unavailable")
-        return FetchResult(rows=list(self._master_rows), pages=[{"data": list(self._master_rows)}])
+        rows = (
+            self._master_rows(date.fromisoformat(as_of_date))
+            if callable(self._master_rows)
+            else list(self._master_rows)
+        )
+        return FetchResult(rows=list(rows), pages=[{"data": list(rows)}])

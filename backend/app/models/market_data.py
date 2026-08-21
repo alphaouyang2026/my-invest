@@ -105,8 +105,10 @@ class BarQualityStatus(str, enum.Enum):
     """
 
     OK = "ok"
-    #: A non-critical field is missing — readable, but excluded from pool
-    #: construction and signals.
+    #: A non-critical field is missing — the row stays readable and stays
+    #: eligible. Each consumer decides what the gap costs it: stock-pool
+    #: construction ignores this status, because a missing high price says
+    #: nothing about whether the security could be bought.
     EXCLUDED = "excluded"
     #: The security cannot be honestly priced or traded on this date.
     UNTRADABLE = "untradable"
@@ -367,6 +369,14 @@ class InstrumentMasterSnapshotMember(Base):
     sector_17: Mapped[str | None] = mapped_column(String(20))
     sector_33: Mapped[str | None] = mapped_column(String(20))
     scale_category: Mapped[str | None] = mapped_column(String(100))
+    #: The source's own security-type code (`ProdCat`): 011 domestic stock,
+    #: 013 REIT, 014 ETF, 021 foreign stock, 023 foreign ETF. Kept because it
+    #: is the only authoritative separator the feed offers — the five-digit
+    #: code suffix cannot tell an ETF from a common stock (13050, 89510 both
+    #: end in 0), and `market_code` cannot tell a foreign listing from a
+    #: domestic one inside Prime. NULL on rows ingested before this column
+    #: existed; the pool treats NULL as ineligible rather than guessing.
+    product_category: Mapped[str | None] = mapped_column(String(10))
     inferred_security_class: Mapped[str] = mapped_column(String(50))
     classification_method: Mapped[str] = mapped_column(String(100), default="jpx_code_suffix_v1")
     content_hash: Mapped[str] = mapped_column(String(64))
@@ -610,6 +620,13 @@ class DataSnapshot(Base):
     #: due, so inheriting `initial` here would quietly postpone it.
     mode: Mapped[SyncMode | None] = mapped_column(pg_enum(SyncMode, "sync_mode"))
     bar_publish_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    #: The same cutoff idea, for instrument rosters. A separate number because
+    #: rosters publish *after* the bars they accompany, so they are all beyond
+    #: `bar_publish_sequence` and reusing it would make every roster invisible.
+    #: One more cutoff on the one publish sequence, not a second visibility
+    #: mechanism. NULL on snapshots written before weekly rosters existed; those
+    #: had exactly one roster, and `master_snapshot_id` still identifies it.
+    master_publish_sequence: Mapped[int | None] = mapped_column(BigInteger)
     calendar_publication_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("endpoint_publications.id"), nullable=False
     )
