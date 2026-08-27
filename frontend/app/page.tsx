@@ -1,4 +1,5 @@
 import DataCenter from './data-center'
+import ResearchCenter from './research-center'
 
 export default function Home() {
   return (
@@ -9,6 +10,7 @@ export default function Home() {
         <p>以可追溯的数据版本，构建可信的历史研究。</p>
       </header>
       <DataCenter />
+      <ResearchCenter />
     </main>
   );
 }

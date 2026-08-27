@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     jquants_api_key: str | None = None
     jquants_api_key_file: Path | None = None
+    qlib_data_dir: Path = Path("var/qlib-data")
+    research_artifact_dir: Path = Path("var/research-artifacts")
+    qlib_disk_budget_bytes: int = 20 * 1024 * 1024 * 1024
+    qlib_threads: int = 2
 
     @model_validator(mode="after")
     def validate_jquants_key_sources(self) -> "Settings":

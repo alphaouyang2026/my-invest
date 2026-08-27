@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select
 
 from app.models.market_data import (
+    DataSnapshot,
     EndpointPublication,
     PublicationStatus,
     QualityEvaluation,
@@ -15,10 +17,24 @@ from app.models.market_data import (
     SyncRun,
     SyncRunStatus,
 )
+from app.models.research import (
+    ACTIVE_RESEARCH_STATUSES,
+    BuildAttemptStatus,
+    BundleStatus,
+    DataBundleBuildAttempt,
+    QlibDataBundle,
+    ResearchExperiment,
+    ResearchRun,
+    ResearchRunStatus,
+)
 from app.models.task import Task, TaskStatus
 from app.services.jquants_sync_workflow import SyncConflict, SyncPolicy
-from app.worker.registry import get_handler, register
+from app.worker.registry import get_handler, get_recovery, register
 from app.worker.runner import acquire_singleton_lock, recover_orphaned_tasks
+
+# Recovery, like the handler it belongs to, exists only once this module is
+# imported — the same import the worker entrypoint does at startup.
+from app.worker import tasks as _tasks  # noqa: F401
 from tests.fakes import FakeAdapter
 
 DATES = [date(2024, 1, 1) + timedelta(days=offset) for offset in range(12)]
@@ -148,19 +164,34 @@ def test_cancelling_run_completes_its_cancellation_on_restart(sync_workflow, ses
         assert session.get(Task, run.task_id).status == TaskStatus.CANCELLED
 
 
-def test_generic_orphan_task_without_a_sync_run_is_failed(session_factory):
+def test_a_task_type_with_no_registered_recovery_is_failed(session_factory):
+    """The runner cannot tell "nothing to close out" from "nobody wrote one",
+    so the task is failed rather than left RUNNING — and every registered type
+    is expected to carry its own recovery, which the next test pins down."""
     with session_factory() as session:
         task = Task(task_type="noop", status=TaskStatus.RUNNING, started_at=datetime.now(timezone.utc))
         session.add(task)
         session.commit()
         task_id = task.id
 
+    assert get_recovery("noop") is None
     assert recover_orphaned_tasks(session_factory) == 1
 
     with session_factory() as session:
         reloaded = session.get(Task, task_id)
         assert reloaded.status == TaskStatus.FAILED
         assert reloaded.error is not None
+
+
+@pytest.mark.parametrize(
+    "task_type",
+    ["jquants_sync", "quality_revalidation", "momentum_research", "qlib_bundle_build"],
+)
+def test_every_business_task_type_registers_a_recovery(task_type):
+    """The gap this closes was silent: a task type added without a recovery
+    still passed every test while leaving its business row active forever."""
+    assert get_handler(task_type) is not None
+    assert get_recovery(task_type) is not None
 
 
 def test_an_orphaned_revalidation_is_closed_out_rather_than_left_running(
@@ -185,6 +216,127 @@ def test_an_orphaned_revalidation_is_closed_out_rather_than_left_running(
             QualityEvaluationStatus.FAILED
         )
     assert revalidation_workflow.start().id != evaluation_id
+
+
+def _orphaned_research_run(session_factory, *, cancel_requested: bool):
+    """A RUNNING momentum_research task whose run never reached a terminal state."""
+    with session_factory() as session:
+        snapshot_id = session.scalars(
+            select(DataSnapshot.id).order_by(DataSnapshot.created_at.desc()).limit(1)
+        ).first()
+        task = Task(
+            task_type="momentum_research",
+            status=TaskStatus.RUNNING,
+            started_at=datetime.now(timezone.utc),
+        )
+        session.add(task)
+        experiment = ResearchExperiment(
+            definition_fingerprint=f"fingerprint-{uuid4()}",
+            data_snapshot_id=snapshot_id,
+            definition={"factor": "momentum"},
+            observation_start=DATES[0],
+            observation_end=DATES[1],
+            lookback_days=126,
+            skip_days=21,
+        )
+        session.add(experiment)
+        session.flush()
+        run = ResearchRun(
+            experiment_id=experiment.id,
+            task_id=task.id,
+            status=ResearchRunStatus.COMPUTING_FACTORS,
+            cancel_requested=cancel_requested,
+        )
+        session.add(run)
+        session.commit()
+        return run.id
+
+
+def test_an_orphaned_research_run_is_failed_rather_than_left_active(
+    make_workflow, session_factory
+):
+    """A run left in an active status is what `create_run` reuses, so the whole
+    experiment definition becomes unrunnable: every later request is handed back
+    the run that died, and nothing can move it."""
+    workflow = make_workflow(FakeAdapter(trading_dates=DATES[:2]))
+    workflow.execute(workflow.start().id)
+    run_id = _orphaned_research_run(session_factory, cancel_requested=False)
+
+    recover_orphaned_tasks(session_factory)
+
+    with session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run.status is ResearchRunStatus.FAILED
+        assert run.status not in ACTIVE_RESEARCH_STATUSES
+        assert run.error_code == "worker_restart"
+        assert run.finished_at is not None
+
+
+def test_an_orphaned_research_run_that_was_cancelled_reports_the_cancellation(
+    make_workflow, session_factory
+):
+    """The cancel was already granted; the crash is not what ended this run, and
+    reporting it as a failure would blame the wrong thing."""
+    workflow = make_workflow(FakeAdapter(trading_dates=DATES[:2]))
+    workflow.execute(workflow.start().id)
+    run_id = _orphaned_research_run(session_factory, cancel_requested=True)
+
+    recover_orphaned_tasks(session_factory)
+
+    with session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run.status is ResearchRunStatus.CANCELLED
+        assert run.error_code is None
+        assert session.get(Task, run.task_id).status == TaskStatus.CANCELLED
+
+
+def test_an_orphaned_bundle_build_is_closed_out_rather_than_left_building(
+    make_workflow, session_factory
+):
+    """A bundle left BUILDING is a dead end, not just an untidy row: the rebuild
+    request returns the active bundle instead of queueing work, and the delete
+    refuses it, so the bundle screen offers no way out at all."""
+    workflow = make_workflow(FakeAdapter(trading_dates=DATES[:2]))
+    workflow.execute(workflow.start().id)
+
+    with session_factory() as session:
+        snapshot_id = session.scalars(
+            select(DataSnapshot.id).order_by(DataSnapshot.created_at.desc()).limit(1)
+        ).first()
+        task = Task(
+            task_type="qlib_bundle_build",
+            status=TaskStatus.RUNNING,
+            started_at=datetime.now(timezone.utc),
+        )
+        session.add(task)
+        bundle = QlibDataBundle(
+            data_snapshot_id=snapshot_id,
+            exporter_schema_version="test",
+            pyqlib_version="0.9.7",
+            status=BundleStatus.BUILDING,
+        )
+        session.add(bundle)
+        session.flush()
+        session.add(
+            DataBundleBuildAttempt(
+                bundle_id=bundle.id,
+                task_id=task.id,
+                status=BuildAttemptStatus.BUILDING,
+                started_at=datetime.now(timezone.utc),
+            )
+        )
+        session.commit()
+        bundle_id, task_id = bundle.id, task.id
+
+    recover_orphaned_tasks(session_factory)
+
+    with session_factory() as session:
+        assert session.get(QlibDataBundle, bundle_id).status is BundleStatus.FAILED
+        attempt = session.scalars(
+            select(DataBundleBuildAttempt).where(DataBundleBuildAttempt.task_id == task_id)
+        ).one()
+        assert attempt.status is BuildAttemptStatus.FAILED
+        assert attempt.finished_at is not None
 
 
 def test_only_one_active_run_exists_per_source(sync_workflow, session_factory):

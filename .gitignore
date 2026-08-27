@@ -9,6 +9,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .pytest-tmp/
+.pytest-tmp*/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
@@ -30,6 +31,7 @@ Thumbs.db
 
 # Postgres
 pgdata/
+backend/var/
 
 # Generated API client (regenerate: backend `uv run python -m app.export_openapi`,
 # then frontend `npm run generate:api`)
