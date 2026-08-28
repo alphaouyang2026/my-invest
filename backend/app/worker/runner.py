@@ -15,31 +15,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.core.logging import get_logger
-from app.models.market_data import (
-    TERMINAL_RUN_STATUSES,
-    EndpointPublication,
-    PublicationStatus,
-    QualityEvaluation,
-    QualityEvaluationStatus,
-    SyncRun,
-    SyncRunStatus,
-)
 from app.models.task import Task, TaskStatus
-from app.services.jquants_sync_workflow import SyncCancelled, SyncPolicy
-from app.worker.registry import get_handler
+from app.services.jquants_sync_workflow import SyncCancelled
+from app.worker.registry import get_handler, get_recovery
 
 logger = get_logger(__name__)
 
 POLL_INTERVAL_SECONDS = 3
 SINGLETON_LOCK_NAME = "task-runner:singleton"
 
-_RUN_TERMINAL_TO_TASK = {
-    SyncRunStatus.SUCCEEDED: TaskStatus.SUCCEEDED,
-    SyncRunStatus.NO_CHANGE: TaskStatus.SUCCEEDED,
-    SyncRunStatus.FAILED: TaskStatus.FAILED,
-    SyncRunStatus.PARTIAL_FAILED: TaskStatus.FAILED,
-    SyncRunStatus.CANCELLED: TaskStatus.CANCELLED,
-}
+ORPHAN_ERROR = "Orphaned by worker restart while RUNNING"
 
 
 def _advisory_key(name: str) -> int:
@@ -74,114 +59,49 @@ def acquire_singleton_lock(engine: Engine) -> Connection | None:
     return connection
 
 
-def recover_orphaned_tasks(
-    session_factory: sessionmaker[Session], *, policy: SyncPolicy = SyncPolicy()
-) -> int:
+def recover_orphaned_tasks(session_factory: sessionmaker[Session]) -> int:
     """Reconcile tasks left RUNNING by a dead worker.
 
     The singleton lock has already proven no other worker is alive, so every
-    RUNNING task here is an orphan. Sync runs are re-queued against their
-    persisted checkpoint rather than failed outright — the batch/publication
-    records are exactly the progress that survives a crash.
+    RUNNING task here is an orphan. Each is failed first and then handed to the
+    recovery registered for its type, which owns the business row and may put
+    the task back on the queue if it has a checkpoint worth resuming.
+
+    A type with no recovery registered is reported rather than quietly failed.
+    The runner cannot tell "nothing to close out" from "nobody wrote one", and
+    guessing is how a business row gets left in an active state that no screen
+    can then move: rebuild refused because a build looks live, delete refused
+    for the same reason, and no way out but the database.
     """
     recovered = 0
     with session_factory() as session:
         orphans = session.scalars(select(Task).where(Task.status == TaskStatus.RUNNING)).all()
         for task in orphans:
-            bind_contextvars(task_id=str(task.id))
-            run = session.scalar(select(SyncRun).where(SyncRun.task_id == task.id).with_for_update())
+            bind_contextvars(task_id=str(task.id), task_type=task.task_type)
+            _fail_orphaned_task(task)
 
-            if run is None:
-                # A generic task with no business checkpoint: nothing safe to resume.
-                task.status = TaskStatus.FAILED
-                task.error = "Orphaned by worker restart while RUNNING"
-                task.finished_at = datetime.now(timezone.utc)
-                _fail_orphaned_evaluation(session, task)
-                logger.warning("task.orphaned_on_restart", task_type=task.task_type)
-                recovered += 1
-                continue
-
-            recovered += _recover_sync_run(session, run, task, policy)
+            recovery = get_recovery(task.task_type)
+            if recovery is None:
+                logger.warning("task.orphaned_without_recovery")
+            else:
+                recovery(session, task)
+                logger.warning("task.orphaned_on_restart", status=task.status.value)
+            recovered += 1
 
         session.commit()
         clear_contextvars()
     return recovered
 
 
-def _fail_orphaned_evaluation(session: Session, task: Task) -> None:
-    """Close out a re-validation whose worker died mid-pass.
+def _fail_orphaned_task(task: Task) -> None:
+    """The default outcome for every orphan, applied before its recovery runs.
 
-    Nothing here is resumable — the pass is one set of aggregate queries, so it
-    simply runs again — but the row must not be left RUNNING: it is what the UI
-    reports, and what the next re-validation checks before starting. A stuck
-    RUNNING row would be exactly the dead end this ticket exists to remove.
+    Recoveries overwrite it when the task is resumable, so this is what a task
+    ends up with when nothing knows better — never a row left at RUNNING.
     """
-    evaluation = session.scalar(
-        select(QualityEvaluation).where(QualityEvaluation.task_id == task.id).with_for_update()
-    )
-    if evaluation is None or evaluation.status not in {
-        QualityEvaluationStatus.QUEUED,
-        QualityEvaluationStatus.RUNNING,
-    }:
-        return
-    evaluation.status = QualityEvaluationStatus.FAILED
-    evaluation.error_summary = "Orphaned by worker restart while running"
-    logger.warning("quality_evaluation.orphaned_on_restart", evaluation_id=str(evaluation.id))
-
-
-def _recover_sync_run(session: Session, run: SyncRun, task: Task, policy: SyncPolicy) -> int:
-    now = datetime.now(timezone.utc)
-
-    if run.status in TERMINAL_RUN_STATUSES:
-        # Legacy inconsistency: a terminal run must never be re-queued. Repair
-        # the task to match what the run already decided.
-        task.status = _RUN_TERMINAL_TO_TASK[run.status]
-        task.finished_at = task.finished_at or run.finished_at or now
-        logger.warning("task.repaired_against_terminal_run", run_status=run.status.value)
-        return 1
-
-    session.execute(
-        EndpointPublication.__table__.update()
-        .where(
-            EndpointPublication.sync_run_id == run.id,
-            EndpointPublication.status == PublicationStatus.STAGING,
-        )
-        .values(status=PublicationStatus.FAILED, error_code="worker_restart")
-    )
-
-    if run.status == SyncRunStatus.CANCELLING:
-        run.status = SyncRunStatus.CANCELLED
-        run.finished_at = now
-        task.status = TaskStatus.CANCELLED
-        task.finished_at = now
-        logger.info("sync_run.cancel_completed_on_restart")
-        return 1
-
-    if task.attempt_count >= policy.max_task_attempts:
-        published = session.scalar(
-            select(func.count())
-            .select_from(EndpointPublication)
-            .where(
-                EndpointPublication.sync_run_id == run.id,
-                EndpointPublication.status == PublicationStatus.PUBLISHED,
-            )
-        )
-        run.status = SyncRunStatus.PARTIAL_FAILED if published else SyncRunStatus.FAILED
-        run.error_code = "worker_restart"
-        run.error_summary = f"Exceeded {policy.max_task_attempts} worker attempts"
-        run.finished_at = now
-        task.status = TaskStatus.FAILED
-        task.error = run.error_summary
-        task.finished_at = now
-        logger.warning("sync_run.attempts_exhausted", attempts=task.attempt_count)
-        return 1
-
-    run.status = SyncRunStatus.QUEUED
-    task.status = TaskStatus.QUEUED
-    task.started_at = None
-    task.finished_at = None
-    logger.info("sync_run.requeued_from_checkpoint", attempt=task.attempt_count)
-    return 1
+    task.status = TaskStatus.FAILED
+    task.error = ORPHAN_ERROR
+    task.finished_at = datetime.now(timezone.utc)
 
 
 def _claim_next_task(session: Session) -> Task | None:
@@ -193,9 +113,10 @@ def _claim_next_task(session: Session) -> Task | None:
     task.status = TaskStatus.RUNNING
     task.attempt_count += 1
     task.started_at = datetime.now(timezone.utc)
-    run = session.scalar(select(SyncRun).where(SyncRun.task_id == task.id))
-    if run is not None and run.status == SyncRunStatus.QUEUED:
-        run.status = SyncRunStatus.RUNNING
+    # Only the task is claimed here. Whatever business row it drives is the
+    # handler's to move, and the sync workflow already does it under a row lock
+    # a moment later — doing it again from out here would be a second, unlocked
+    # writer to the same row for no gain.
     session.commit()
     return task
 
@@ -218,7 +139,10 @@ def _run_task(session: Session, task: Task) -> None:
             task.progress = result
             task.status = TaskStatus.SUCCEEDED
             task.finished_at = datetime.now(timezone.utc)
-        logger.info("task.succeeded")
+        # Not necessarily SUCCEEDED: a handler that owns its own terminal state
+        # may have already committed CANCELLED here, and reporting that as a
+        # success is how a cancelled run comes to look like a finished one.
+        logger.info("task.finished", status=task.status.value)
     except SyncCancelled:
         session.rollback()
         session.refresh(task)

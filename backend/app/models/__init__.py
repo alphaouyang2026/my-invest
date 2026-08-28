@@ -15,10 +15,19 @@ from app.models.market_data import (
     SyncTargetDate,
 )
 from app.models.task import Task
+from app.models.research import (
+    DataBundleBuildAttempt,
+    QlibDataBundle,
+    ResearchArtifact,
+    ResearchExperiment,
+    ResearchRun,
+)
 
 __all__ = [
     "Task", "SyncRun", "SyncBatch", "EndpointPublication", "RawSourcePage", "SyncTargetDate",
     "Instrument", "InstrumentMasterSnapshot", "InstrumentMasterSnapshotMember",
     "BarRecord", "BarVersion", "PublicationBarObservation", "CurrentBar",
     "DataSnapshot", "DataSnapshotHead",
+    "QlibDataBundle", "DataBundleBuildAttempt", "ResearchExperiment",
+    "ResearchRun", "ResearchArtifact",
 ]

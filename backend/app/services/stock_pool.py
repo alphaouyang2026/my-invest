@@ -41,8 +41,11 @@ from app.models.market_data import (
     InstrumentMasterSnapshotMember,
     PublicationStatus,
 )
+from app.core.logging import get_logger
 from app.services.calendar_port import CalendarCoverageError, CalendarPort
 from app.services.snapshot_reader import snapshot_member_query
+
+logger = get_logger(__name__)
 
 #: How stale the roster may be before it is worth saying so, in calendar days.
 #: Not a policy knob: it is a direct consequence of fetching one roster per
@@ -618,7 +621,7 @@ def build_stock_pool(
                 )
             )
 
-    return StockPool(
+    pool = StockPool(
         as_of=as_of,
         snapshot_id=snapshot.id,
         master_snapshot_id=roster.id,
@@ -628,6 +631,15 @@ def build_stock_pool(
         warnings=_warnings(as_of, roster.as_of_date, dated_after),
         policy_fingerprint=policy_fingerprint(policy),
     )
+    logger.debug(
+        "stock_pool.built",
+        as_of=as_of.isoformat(),
+        master_as_of=roster.as_of_date.isoformat(),
+        members=len(pool.members),
+        exclusions=len(pool.exclusions),
+        warnings=list(pool.warnings),
+    )
+    return pool
 
 
 def _warnings(as_of: date, master_as_of: date, dated_after: bool) -> tuple[PoolWarning, ...]:

@@ -65,7 +65,7 @@ test('sync now sends no execution parameters', async () => {
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
     expect(post).toBeDefined()
     expect(post![0]).toContain('/data-sync/jquants')
-    expect(JSON.parse(post![1].body)).toEqual({})
+    expect(JSON.parse(post![1]!.body as string)).toEqual({})
   })
 })
 
