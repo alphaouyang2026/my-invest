@@ -165,3 +165,16 @@ def client(
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_sync_workflow, None)
         app.dependency_overrides.pop(get_revalidation_workflow, None)
+
+
+@pytest.fixture(scope="module")
+def monkeypatch_module():
+    """`monkeypatch` with module scope.
+
+    The golden model run is expensive enough that it is executed once per
+    module, and a function-scoped patch would be undone before the assertions
+    that read its output.
+    """
+    patcher = pytest.MonkeyPatch()
+    yield patcher
+    patcher.undo()

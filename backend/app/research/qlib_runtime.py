@@ -30,7 +30,8 @@ def read_features(
     start: str,
     end: str,
 ) -> pd.DataFrame:
-    """The only application seam that initializes Qlib global provider state."""
+    """The only application seam that initializes Qlib global provider state.
+    """
     import qlib
     from qlib.config import REG_CN
     from qlib.data import D

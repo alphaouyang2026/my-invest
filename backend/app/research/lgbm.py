@@ -83,14 +83,69 @@ class CancellableLGBModel(LGBModel):
         super().__init__(*args, **kwargs)
         self._should_cancel = should_cancel
 
-    def fit(self, dataset, **kwargs):
-        if self._should_cancel is None:
-            return super().fit(dataset, **kwargs)
-        if "callbacks" in kwargs:
-            # The very collision this class exists to avoid; a caller reaching
-            # past it has misunderstood the seam.
-            raise TypeError("callbacks are owned by CancellableLGBModel; pass should_cancel instead")
-        return super().fit(dataset, callbacks=[self._cancel_callback()], **kwargs)
+    def fit(
+        self,
+        dataset,
+        num_boost_round=None,
+        early_stopping_rounds=None,
+        verbose_eval=0,
+        evals_result=None,
+        reweighter=None,
+        **kwargs,
+    ):
+        """`LGBModel.fit` with one more callback in the list it builds.
+
+        Delegating to `super().fit(callbacks=[...])` does not work, and failing
+        that way is the whole reason this class exists: the base method passes
+        its own `callbacks=[...]` to `lgb.train` and then expands `**kwargs`
+        after it, so the argument arrives twice and LightGBM raises
+        `got multiple values for keyword argument 'callbacks'`. The list has to
+        be assembled before the call, which means restating it.
+
+        The training call itself is the base method unchanged — see the
+        byte-identical assertion in `test_lgbm_seam.py` for what that is worth.
+        The metric replay that followed it is dropped; the reason is at the end
+        of this method.
+        """
+        import lightgbm as lgb
+
+        if evals_result is None:
+            evals_result = {}
+        datasets, names = list(zip(*self._prepare_data(dataset, reweighter)))
+        callbacks = [
+            lgb.early_stopping(
+                self.early_stopping_rounds
+                if early_stopping_rounds is None
+                else early_stopping_rounds
+            ),
+            lgb.log_evaluation(period=verbose_eval),
+            lgb.record_evaluation(evals_result),
+        ]
+        if self._should_cancel is not None:
+            # Appended last, but that is not what decides when it runs — its
+            # declared `order` is (see `_cancel_callback`).
+            callbacks.append(self._cancel_callback())
+        self.model = lgb.train(
+            self.params,
+            datasets[0],
+            num_boost_round=self.num_boost_round if num_boost_round is None else num_boost_round,
+            valid_sets=datasets,
+            valid_names=names,
+            callbacks=callbacks,
+            **kwargs,
+        )
+        # The base method replays every metric into the active Qlib recorder
+        # here. That is dropped deliberately.
+        #
+        # It writes to an MLflow file store, and mlflow 3.15.2 refuses to open
+        # one at all: "The filesystem tracking backend is in maintenance mode
+        # and will not receive further updates". Opting back in through
+        # MLFLOW_ALLOW_FILE_STORE would tie training to a backend its own
+        # maintainers have frozen, to populate a directory the design deletes
+        # at the end of the run and never reads.
+        #
+        # Nothing is lost: `evals_result` holds the same numbers and becomes
+        # `training_curve.parquet`, which is the durable form either way.
 
     def _cancel_callback(self):
         should_cancel = self._should_cancel
