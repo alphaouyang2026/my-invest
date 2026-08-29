@@ -73,7 +73,12 @@ from app.services.stock_pool import DEFAULT_POLICY, policy_fingerprint
 pytest.importorskip("qlib")
 
 GOLDEN = Path(__file__).parent / "data" / "model_research_golden.json.gz"
-pytestmark = pytest.mark.skipif(not GOLDEN.exists(), reason="golden fixture not exported")
+pytestmark = [
+    # Five real training runs, about three and a half minutes. Opt-in via
+    # `--slow`; see the collection hook in conftest.
+    pytest.mark.slow,
+    pytest.mark.skipif(not GOLDEN.exists(), reason="golden fixture not exported"),
+]
 
 #: What the exporter was asked for. Pinned so a silently re-exported fixture is
 #: caught here rather than showing up as a changed metric later.

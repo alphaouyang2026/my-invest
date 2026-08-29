@@ -178,3 +178,27 @@ def monkeypatch_module():
     patcher = pytest.MonkeyPatch()
     yield patcher
     patcher.undo()
+
+
+def pytest_addoption(parser) -> None:
+    parser.addoption(
+        "--slow",
+        action="store_true",
+        default=False,
+        help="also run tests that train a real model on the golden slice",
+    )
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """Skip the training runs unless asked for.
+
+    They are worth their minutes — they are the only tests that prove the seams
+    add up — but paying them on every edit pushes the suite past the point where
+    it gets run at all. CI passes `--slow`; a working loop does not.
+    """
+    if config.getoption("--slow"):
+        return
+    skip = pytest.mark.skip(reason="needs --slow (trains a real model)")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip)

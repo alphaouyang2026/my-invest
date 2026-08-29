@@ -28,6 +28,9 @@ testpaths = ["tests"]
 # is unreadable for this account (WinError 5), which fails any test using the
 # tmp_path fixture before it runs.
 addopts = "--basetemp=.pytest-tmp"
+markers = [
+    "slow: needs a real training run; skipped unless --slow is given",
+]
 
 [build-system]
 requires = ["hatchling"]

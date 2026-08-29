@@ -17,6 +17,7 @@ from app.models.research import (
     QlibDataBundle,
     ResearchArtifact,
     ResearchExperiment,
+    ResearchExperimentKind,
     ResearchRun,
     ResearchRunStatus,
 )
@@ -216,6 +217,17 @@ class SqlResearchApplication:
         run = self.session.get(ResearchRun, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Research run not found")
+        experiment = self.session.get(ResearchExperiment, run.experiment_id)
+        if experiment is not None and experiment.kind is ResearchExperimentKind.MODEL:
+            # Same URL, same response shape, different table underneath. The
+            # branch is here rather than in the route so that the two kinds stay
+            # indistinguishable from outside — which is the entire purpose of
+            # the RankedScores interface.
+            from app.services.model_research import SqlModelResearchApplication
+
+            return SqlModelResearchApplication(self.session).get_ranked_scores(
+                run_id, observation_date
+            )
         # Not `select(ResearchArtifact)`: that row is written one step before
         # the directory is moved into place, so going by it alone can open a
         # path that is not there yet (see research/publication.py).
