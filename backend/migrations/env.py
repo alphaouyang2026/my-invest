@@ -35,7 +35,23 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            # One transaction per revision rather than one for the whole upgrade.
+            #
+            # Postgres refuses to *use* an enum value added in the transaction
+            # that is still open ("New enum values must be committed before they
+            # can be used"), so a revision that adds a status label and a later
+            # one that names it in a partial index cannot share a transaction.
+            # Casting the predicate to text does not help — Postgres rejects it
+            # with "functions in index predicate must be marked IMMUTABLE".
+            #
+            # The cost is that a failure midway through a multi-revision upgrade
+            # leaves the earlier revisions applied. That is the normal alembic
+            # posture, and `alembic current` reports exactly where it stopped.
+            transaction_per_migration=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

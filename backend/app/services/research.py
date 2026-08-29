@@ -22,6 +22,7 @@ from app.models.research import (
 )
 from app.models.task import Task, TaskStatus
 from app.research.artifacts import ResearchArtifactReader
+from app.research.publication import readable_artifact
 from app.research.bundle_builder import EXPORTER_SCHEMA_VERSION, PYQLIB_VERSION
 from app.research.definition import ResearchDefinition
 from app.services.stock_pool import DEFAULT_POLICY, policy_fingerprint
@@ -191,9 +192,10 @@ class SqlResearchApplication:
         run = self.session.get(ResearchRun, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Research run not found")
-        artifact = self.session.scalar(
-            select(ResearchArtifact).where(ResearchArtifact.research_run_id == run_id)
-        )
+        # Not `select(ResearchArtifact)`: that row is written one step before
+        # the directory is moved into place, so going by it alone can open a
+        # path that is not there yet (see research/publication.py).
+        artifact = readable_artifact(self.session, run_id)
         if artifact is None:
             raise HTTPException(status_code=409, detail="Research artifact is not published")
         summary = ResearchArtifactReader(get_settings().research_artifact_dir).summary(
@@ -214,9 +216,10 @@ class SqlResearchApplication:
         run = self.session.get(ResearchRun, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Research run not found")
-        artifact = self.session.scalar(
-            select(ResearchArtifact).where(ResearchArtifact.research_run_id == run_id)
-        )
+        # Not `select(ResearchArtifact)`: that row is written one step before
+        # the directory is moved into place, so going by it alone can open a
+        # path that is not there yet (see research/publication.py).
+        artifact = readable_artifact(self.session, run_id)
         if artifact is None:
             raise HTTPException(status_code=409, detail="Research artifact is not published")
         reader = ResearchArtifactReader(get_settings().research_artifact_dir)

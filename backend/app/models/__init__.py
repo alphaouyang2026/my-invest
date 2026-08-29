@@ -17,10 +17,13 @@ from app.models.market_data import (
 from app.models.task import Task
 from app.models.research import (
     DataBundleBuildAttempt,
+    PredictionRun,
     QlibDataBundle,
     ResearchArtifact,
+    ResearchArtifactPublication,
     ResearchExperiment,
     ResearchRun,
+    TrainedModel,
 )
 
 __all__ = [
@@ -30,4 +33,5 @@ __all__ = [
     "DataSnapshot", "DataSnapshotHead",
     "QlibDataBundle", "DataBundleBuildAttempt", "ResearchExperiment",
     "ResearchRun", "ResearchArtifact",
+    "TrainedModel", "PredictionRun", "ResearchArtifactPublication",
 ]

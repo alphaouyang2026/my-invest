@@ -28,7 +28,10 @@ from app.research.qlib_runtime import read_features
 from app.services.snapshot_reader import snapshot_member_query
 
 
-EXPORTER_SCHEMA_VERSION = "1"
+# Bumped to 2 in ticket 07: the bundle now carries `$vwap`, which Alpha158 and
+# Alpha360 both read. The version is part of the bundle identity, so v1 bundles
+# and the artifacts derived from them stay valid and are simply not reused.
+EXPORTER_SCHEMA_VERSION = "2"
 PYQLIB_VERSION = "0.9.7"
 
 # Rows fetched per round trip while exporting. The point is the server-side
@@ -160,7 +163,7 @@ class QlibDataBundleBuilder:
             smoke = read_features(
                 temporary,
                 instruments="all",
-                fields=["$close", "$factor"],
+                fields=["$close", "$factor", "$vwap"],
                 start=calendar[0].isoformat(),
                 end=calendar[-1].isoformat(),
             )

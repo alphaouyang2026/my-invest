@@ -18,8 +18,9 @@ ARTIFACT_SCHEMA_VERSION = "1"
 
 
 @dataclass(frozen=True)
-class PublishedArtifact:
-    relative_path: str
+class StagedArtifact:
+    """What was written to staging, before anything is published."""
+
     logical_checksum: str
     size_bytes: int
     manifest: dict
@@ -33,32 +34,38 @@ def _checksum(path: Path) -> str:
     return digest.hexdigest()
 
 
-class ResearchArtifactWriter:
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
+class ArtifactStaging:
+    """Writes an artifact directory and checksums it. Publishes nothing.
 
-    def publish(
+    Split out of the old `ResearchArtifactWriter`, which wrote *and* renamed
+    into place in one call. The rename is now the publisher's business
+    (`research/publication.py`) because it has to be ordered against a database
+    transaction, and that ordering is the whole point of the protocol. Keeping
+    the byte-writing pure leaves it testable without a session.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = Path(directory)
+
+    def write(
         self,
-        run_id: uuid.UUID,
         *,
+        run_id: uuid.UUID,
         tables: dict[str, pd.DataFrame],
         summary: dict,
         warnings: list[dict],
         runtime_identity: dict,
-    ) -> PublishedArtifact:
-        self.root.mkdir(parents=True, exist_ok=True)
-        final = self.root / str(run_id)
-        if final.exists():
-            raise FileExistsError(f"Research artifact already exists for {run_id}")
-        temporary = self.root / f".{run_id}.tmp-{uuid.uuid4()}"
-        temporary.mkdir()
+        extra_files: dict[str, bytes] | None = None,
+    ) -> StagedArtifact:
+        self.directory.parent.mkdir(parents=True, exist_ok=True)
+        self.directory.mkdir(parents=True, exist_ok=False)
         try:
             file_entries: dict[str, dict] = {}
             for name, frame in sorted(tables.items()):
                 if not name.replace("_", "").isalnum():
                     raise ValueError(f"Invalid artifact table name {name!r}")
                 filename = f"{name}.parquet"
-                path = temporary / filename
+                path = self.directory / filename
                 frame.to_parquet(path, index=False)
                 file_entries[filename] = {
                     "rows": len(frame),
@@ -72,7 +79,17 @@ class ResearchArtifactWriter:
                     bytes=file_entries[filename]["bytes"],
                 )
 
-            summary_path = temporary / "summary.json"
+            for filename, payload in sorted((extra_files or {}).items()):
+                path = self.directory / filename
+                if path.parent != self.directory:
+                    raise ValueError(f"Artifact file {filename!r} escapes the artifact directory")
+                path.write_bytes(payload)
+                file_entries[filename] = {
+                    "bytes": path.stat().st_size,
+                    "sha256": _checksum(path),
+                }
+
+            summary_path = self.directory / "summary.json"
             summary_path.write_text(
                 json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True),
                 encoding="utf-8",
@@ -92,24 +109,23 @@ class ResearchArtifactWriter:
                 "warnings": warnings,
                 "files": file_entries,
             }
-            manifest_path = temporary / "manifest.json"
-            manifest_path.write_text(
+            (self.directory / "manifest.json").write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
                 encoding="utf-8",
             )
-            os.replace(temporary, final)
         except Exception:
-            shutil.rmtree(temporary, ignore_errors=True)
+            shutil.rmtree(self.directory, ignore_errors=True)
             raise
-        size_bytes = sum(path.stat().st_size for path in final.iterdir() if path.is_file())
+
+        size_bytes = sum(path.stat().st_size for path in self.directory.iterdir() if path.is_file())
         logger.info(
-            "research_artifact.published",
-            relative_path=str(run_id),
+            "research_artifact.staged",
+            directory=self.directory.name,
             tables=sorted(tables),
             size_bytes=size_bytes,
             logical_checksum=logical_checksum,
         )
-        return PublishedArtifact(str(run_id), logical_checksum, size_bytes, manifest)
+        return StagedArtifact(logical_checksum, size_bytes, manifest)
 
 
 class ResearchArtifactReader:

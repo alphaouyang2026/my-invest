@@ -14,7 +14,9 @@ from sqlalchemy import Connection, Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.research.publication import recover_publications
 from app.models.task import Task, TaskStatus
 from app.services.jquants_sync_workflow import SyncCancelled
 from app.worker.registry import get_handler, get_recovery
@@ -75,6 +77,14 @@ def recover_orphaned_tasks(session_factory: sessionmaker[Session]) -> int:
     """
     recovered = 0
     with session_factory() as session:
+        # Before any task is touched. A `prepared` publication is a run whose
+        # rows are committed but whose bytes may still be in staging; leaving it
+        # unresolved would let a later reader open a directory that is not there
+        # (see research/publication.py).
+        failed_runs = recover_publications(session, get_settings().research_artifact_dir)
+        if failed_runs:
+            logger.warning("artifact_publication.recovered_as_failed", runs=len(failed_runs))
+
         orphans = session.scalars(select(Task).where(Task.status == TaskStatus.RUNNING)).all()
         for task in orphans:
             bind_contextvars(task_id=str(task.id), task_type=task.task_type)

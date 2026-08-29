@@ -2,7 +2,7 @@ from uuid import UUID
 
 import pandas as pd
 
-from app.research.artifacts import ResearchArtifactReader, ResearchArtifactWriter
+from app.research.artifacts import ArtifactStaging, ResearchArtifactReader
 from app.research.evaluation import CrossSectionEvaluation, flatten_group_returns
 
 
@@ -11,10 +11,8 @@ def test_research_artifact_publishes_stable_json_and_parquet(tmp_path) -> None:
     scores = pd.DataFrame(
         [{"observation_date": "2025-01-31", "instrument_id": "alpha", "raw_score": 0.2}]
     )
-    writer = ResearchArtifactWriter(tmp_path)
-
-    published = writer.publish(
-        run_id,
+    staged = ArtifactStaging(tmp_path / str(run_id)).write(
+        run_id=run_id,
         tables={"scores": scores},
         summary={"weekly_ic_mean": 0.1},
         warnings=[{"code": "free_data_limit"}],
@@ -22,9 +20,8 @@ def test_research_artifact_publishes_stable_json_and_parquet(tmp_path) -> None:
     )
     reader = ResearchArtifactReader(tmp_path)
 
-    assert published.relative_path == str(run_id)
-    assert published.manifest["schema_version"] == "1"
-    assert published.manifest["files"]["scores.parquet"]["rows"] == 1
+    assert staged.manifest["schema_version"] == "1"
+    assert staged.manifest["files"]["scores.parquet"]["rows"] == 1
     assert reader.summary(str(run_id))["weekly_ic_mean"] == 0.1
     assert reader.table(str(run_id), "scores").iloc[0]["instrument_id"] == "alpha"
 
@@ -54,8 +51,8 @@ def test_a_metrics_table_carrying_group_returns_survives_the_parquet_round_trip(
         **flatten_group_returns(evaluation.group_returns),
     }
 
-    ResearchArtifactWriter(tmp_path).publish(
-        run_id,
+    ArtifactStaging(tmp_path / str(run_id)).write(
+        run_id=run_id,
         tables={"daily_metrics": pd.DataFrame([row])},
         summary={},
         warnings=[],

@@ -51,6 +51,29 @@ def _number(value: Decimal | None) -> float:
     return np.nan if value is None else float(value)
 
 
+def _vwap(bar: "BundleBar", *, factor: float, untradable: bool) -> float:
+    """Volume-weighted average price on the same basis as `$close`.
+
+    Qlib's Alpha158 and Alpha360 both read `$vwap`, and the source gives it only
+    indirectly: turnover is in yen against *raw* volume, while every other
+    research field here is adjusted. Dividing gives the price actually paid that
+    day; multiplying by `factor` puts it on the adjusted scale `$close` uses, so
+    the two are comparable across a split.
+
+    NaN wherever any input is missing rather than a filled value — a security
+    that did not trade has no average price, and inventing one would let a
+    suspended day look like an ordinary one (see the missing-value stance in
+    `build_instrument_frame`).
+    """
+    if untradable:
+        return np.nan
+    turnover = _number(bar.trading_value)
+    raw_volume = _number(bar.raw_volume)
+    if np.isnan(turnover) or np.isnan(raw_volume) or raw_volume <= 0 or np.isnan(factor):
+        return np.nan
+    return turnover / raw_volume * factor
+
+
 def build_instrument_frame(
     calendar_index: pd.Index,
     bars: Sequence[BundleBar],
@@ -82,6 +105,7 @@ def build_instrument_frame(
             "close": adjusted_close,
             "volume": research(bar.adjusted_volume),
             "factor": factor,
+            "vwap": _vwap(bar, factor=factor, untradable=untradable),
             "rawopen": _number(bar.raw_open),
             "rawhigh": _number(bar.raw_high),
             "rawlow": _number(bar.raw_low),

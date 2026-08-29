@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.market_data import DataSnapshot, TradingCalendar
-from app.models.research import ResearchArtifact, ResearchExperiment, ResearchRun, ResearchRunStatus
+from app.models.research import ResearchExperiment, ResearchRun, ResearchRunStatus
 from app.models.task import Task, TaskStatus
-from app.research.artifacts import ResearchArtifactWriter
+from app.research.publication import ResearchArtifactPublisher
 from app.research.bundle_builder import QlibDataBundleBuilder
 from app.research.evaluation import (
     evaluate_cross_section,
@@ -324,8 +324,14 @@ class ResearchWorkflow:
 
                 self._phase(session, run, ResearchRunStatus.PUBLISHING, clock)
                 labels = pd.concat([daily_labels, weekly_labels], ignore_index=True)
-                published = ResearchArtifactWriter(get_settings().research_artifact_dir).publish(
-                    run.id,
+                publisher = ResearchArtifactPublisher(session, get_settings().research_artifact_dir)
+                # Step 1+2: stage the bytes, then commit every row that describes
+                # them — including the run's own terminal state — in one
+                # transaction. The directory is still in staging at this point;
+                # `readable_artifact` is what keeps a reader from opening it
+                # before step 3 puts it in place.
+                prepared = publisher.prepare(
+                    run,
                     tables={
                         "universes": pd.DataFrame(universe_rows),
                         "exclusions": pd.DataFrame(exclusion_rows),
@@ -339,30 +345,25 @@ class ResearchWorkflow:
                     warnings=warnings,
                     runtime_identity=run.runtime_identity,
                 )
-                session.add(
-                    ResearchArtifact(
-                        research_run_id=run.id,
-                        schema_version=published.manifest["schema_version"],
-                        relative_path=published.relative_path,
-                        logical_checksum=published.logical_checksum,
-                        manifest=published.manifest,
-                        size_bytes=published.size_bytes,
-                    )
-                )
-                logger.info(
-                    "research_run.artifact_published",
-                    relative_path=published.relative_path,
-                    size_bytes=published.size_bytes,
-                    logical_checksum=published.logical_checksum,
-                )
+                session.add(publisher.artifact_row(prepared))
                 run.status = ResearchRunStatus.SUCCEEDED
                 run.warnings = warnings
                 run.summary = summary
-                run.artifact_size_bytes = published.size_bytes
+                run.artifact_size_bytes = prepared.size_bytes
                 run.elapsed_seconds = int(time.monotonic() - started)
                 run.peak_memory_bytes = _peak_rss_bytes()
                 run.finished_at = datetime.now(timezone.utc)
                 session.commit()
+
+                # Step 3+4. A crash here leaves a `prepared` publication that
+                # `recover_publications` finishes on the next worker start.
+                publisher.commit(prepared)
+                logger.info(
+                    "research_run.artifact_published",
+                    relative_path=prepared.relative_path,
+                    size_bytes=prepared.size_bytes,
+                    logical_checksum=prepared.logical_checksum,
+                )
                 logger.info(
                     "research_run.succeeded",
                     elapsed_seconds=run.elapsed_seconds,
