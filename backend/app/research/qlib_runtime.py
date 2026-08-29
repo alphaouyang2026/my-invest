@@ -86,11 +86,20 @@ def analyze_signals(predictions: pd.DataFrame, labels: pd.DataFrame) -> dict:
 
 
 class _MemoryRecorder:
-    """Minimal recorder adapter; Qlib's pickle/MLflow layout never escapes this module."""
+    """Minimal recorder adapter; Qlib's pickle/MLflow layout never escapes this module.
 
-    def __init__(self, objects: dict[str, object]) -> None:
-        self.objects = objects
+    In memory rather than MLflow-backed, and now necessarily so: mlflow 3.15.2
+    refuses to open a filesystem tracking store at all. It is also the better
+    answer regardless — the design keeps nothing in a recorder directory, so not
+    creating one removes both the deletion step and the temptation to read it.
+    """
+
+    def __init__(self, objects: dict[str, object] | None = None) -> None:
+        self.objects = objects if objects is not None else {}
         self.metrics: dict[str, float] = {}
+        #: `SignalRecord.generate` logs it; nothing reads it back.
+        self.experiment_id = "in-memory"
+        self.id = "in-memory"
 
     def load_object(self, path: str):
         from qlib.utils.exceptions import LoadObjectError
@@ -110,3 +119,45 @@ class _MemoryRecorder:
 
     def log_metrics(self, **metrics) -> None:
         self.metrics.update(metrics)
+
+
+def run_signal_analysis(model, dataset) -> dict:
+    """Qlib's own signal records, over an in-memory recorder.
+
+    `SigAnaRecord` reads `pred.pkl` and `label.pkl`, which `SignalRecord`
+    produces. Running the second without the first does not raise — the base
+    class catches the missing dependency, logs "The dependent data does not
+    exists. Generation skipped." and returns None. So the return value is
+    checked: treating "no exception" as "analysis ran" would report an empty
+    result as a successful one.
+
+    `SignalRecord` covers the test segment only, which is what it is for here —
+    the product metrics for all three segments come from the local statistics
+    module so that the model and the momentum control share one code path. This
+    exists to prove the Qlib stack is really wired up, and its IC is asserted
+    against the local figure in the integration test.
+
+    The label it saves is `DK_R`, the raw forward return rather than the
+    rank-normalised training target, so the IC below is computed against actual
+    returns.
+    """
+    from qlib.workflow.record_temp import SigAnaRecord, SignalRecord
+
+    recorder = _MemoryRecorder()
+    SignalRecord(model=model, dataset=dataset, recorder=recorder).generate()
+    if "pred.pkl" not in recorder.objects:
+        raise RuntimeError("SignalRecord produced no predictions")
+
+    produced = SigAnaRecord(recorder=recorder).generate()
+    if produced is None:
+        raise RuntimeError(
+            "SigAnaRecord skipped: its dependent records were missing, so no analysis was run"
+        )
+    logger.info("qlib.signal_analysis_generated", metrics=sorted(recorder.metrics))
+    return {
+        "predictions": recorder.objects["pred.pkl"],
+        "labels": recorder.objects.get("label.pkl"),
+        "ic": recorder.objects.get("sig_analysis/ic.pkl"),
+        "rank_ic": recorder.objects.get("sig_analysis/ric.pkl"),
+        "metrics": dict(recorder.metrics),
+    }

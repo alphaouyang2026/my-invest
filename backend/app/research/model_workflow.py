@@ -56,7 +56,7 @@ from app.research.model_evaluation import (
     training_curve_frame,
 )
 from app.research.publication import ResearchArtifactPublisher
-from app.research.qlib_runtime import runtime_identity
+from app.research.qlib_runtime import run_signal_analysis, runtime_identity
 from app.services.calendar_port import SessionCalendarPort
 from app.services.stock_pool import DEFAULT_POLICY, StockPoolError, build_stock_pool
 
@@ -125,7 +125,7 @@ class ModelResearchWorkflow:
                 model, evals_result = self._train(session, run, spec, assembled)
 
                 self._phase(session, run, ResearchRunStatus.PREDICTING)
-                predictions = self._predict(model, assembled, spec)
+                predictions, analysis = self._predict(model, assembled, spec)
 
                 self._phase(session, run, ResearchRunStatus.EVALUATING)
                 results = self._evaluate(
@@ -137,6 +137,7 @@ class ModelResearchWorkflow:
                     calendar=calendar,
                     weekly=weekly,
                 )
+                results["qlib_signal_analysis"] = _qlib_analysis_frame(analysis)
 
                 self._phase(session, run, ResearchRunStatus.PUBLISHING)
                 return self._publish(
@@ -247,11 +248,29 @@ class ModelResearchWorkflow:
             raise TrainingCancelled("Cancellation observed after training")
         return model, evals_result
 
-    def _predict(self, model, assembled, spec) -> dict[str, pd.Series]:
-        return {
+    def _predict(self, model, assembled, spec) -> tuple[dict[str, pd.Series], dict]:
+        """Test scores come from `SignalRecord`; train and valid from `predict`.
+
+        Not two ways of doing the same thing. `SignalRecord` is the Qlib record
+        that `SigAnaRecord` consumes, and running it is what proves the stack is
+        actually wired together rather than merely imported. Its scope is the
+        test segment by construction, so the other two segments — which exist to
+        show the train/test gap, not to produce a signal — go through the plain
+        model interface.
+
+        Taking the test scores from the record rather than predicting a second
+        time keeps one authoritative set: two independent inference passes could
+        drift and nothing would notice.
+        """
+        analysis = run_signal_analysis(model, assembled.dataset)
+        test_scores = analysis["predictions"].iloc[:, 0]
+        predictions = {
             segment.name: model.predict(assembled.dataset, segment=segment.name)
             for segment in spec.split.segments
+            if segment.name != "test"
         }
+        predictions["test"] = test_scores
+        return predictions, analysis
 
     def _evaluate(self, *, predictions, assembled, spec, universe_sizes, bundle_path, calendar, weekly):
         labels = assembled.handler.fetch(col_set="label", data_key="raw").reset_index()
@@ -357,6 +376,7 @@ class ModelResearchWorkflow:
                 "feature_missing_rate": assembled.missing_rate,
                 "training_curve": training_curve_frame(evals_result),
                 "labels": results["labels"],
+                "qlib_signal_analysis": results["qlib_signal_analysis"],
             },
             summary=summary,
             warnings=warnings,
@@ -481,3 +501,24 @@ def _checksum(payload: dict) -> str:
     return hashlib.sha256(
         json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+def _qlib_analysis_frame(analysis: dict) -> pd.DataFrame:
+    """`SigAnaRecord`'s own IC series, published beside the local one.
+
+    Kept as a separate table rather than merged into `metrics`: it is Qlib's
+    figure over the test segment, and the integration test asserts the two agree
+    within tolerance. Merging them would make a disagreement invisible, which is
+    the one thing this table is for.
+    """
+    ic = analysis.get("ic")
+    if ic is None or len(ic) == 0:
+        return pd.DataFrame(columns=["observation_date", "ic", "rank_ic"])
+    rank_ic = analysis.get("rank_ic")
+    return pd.DataFrame(
+        {
+            "observation_date": pd.to_datetime(ic.index).date,
+            "ic": ic.to_numpy(),
+            "rank_ic": rank_ic.reindex(ic.index).to_numpy() if rank_ic is not None else None,
+        }
+    )
