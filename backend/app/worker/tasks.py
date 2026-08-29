@@ -43,6 +43,7 @@ from app.models.research import (
 )
 from app.models.task import Task, TaskStatus
 from app.research.bundle_builder import QlibDataBundleBuilder
+from app.research.model_workflow import ModelResearchWorkflow
 from app.research.workflow import ResearchWorkflow
 from app.services.jquants_sync_workflow import JQuantsSyncWorkflow, SyncPolicy
 from app.services.quality_revalidation import TASK_TYPE as REVALIDATION_TASK_TYPE
@@ -249,6 +250,17 @@ def recover_momentum_research(session: Session, task: Task) -> None:
 def run_momentum_research(payload: dict) -> dict:
     run_id = uuid.UUID(payload["research_run_id"])
     return ResearchWorkflow(get_sessionmaker()).execute(run_id)
+
+
+# The same recovery: a model run reaching PUBLISHING leaves a `prepared`
+# publication that `recover_publications` resolves at worker start, and one that
+# did not left nothing at all. Re-running stays the caller's decision — training
+# is expensive and deterministic, so a silent re-queue would repeat a pass
+# nobody asked for twice.
+@register("model_research", recover=recover_momentum_research)
+def run_model_research(payload: dict) -> dict:
+    run_id = uuid.UUID(payload["research_run_id"])
+    return ModelResearchWorkflow(get_sessionmaker()).execute(run_id)
 
 
 # ----------------------------------------------------------- Qlib bundle build
