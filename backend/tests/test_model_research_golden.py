@@ -257,39 +257,84 @@ def _decimal(value: str | None) -> Decimal | None:
 
 
 @pytest.fixture(scope="module")
-def executed(golden, loaded, tmp_path_factory, monkeypatch_module):
-    """Run the workflow once; every assertion below reads its result."""
-    session, snapshot = loaded
+def workspace(tmp_path_factory, monkeypatch_module):
+    """One artifact root and one bundle root for every run in this module.
+
+    Shared deliberately. The bundle is keyed by (snapshot, exporter schema,
+    pyqlib version), so the second and later runs reuse the export instead of
+    repeating it — which is what makes running the workflow several times here
+    affordable at all.
+    """
+    root = tmp_path_factory.mktemp("model-golden")
+    settings = Settings(
+        _env_file=None,
+        qlib_data_dir=root / "bundles",
+        research_artifact_dir=root / "artifacts",
+        qlib_threads=1,
+    )
+    holder = {"settings": settings}
+    monkeypatch_module.setattr("app.core.config.get_settings", lambda: holder["settings"])
+    for module in (
+        "app.research.model_workflow",
+        "app.research.bundle_builder",
+        "app.research.publication",
+    ):
+        monkeypatch_module.setattr(
+            f"{module}.get_settings", lambda: holder["settings"], raising=False
+        )
+    return holder
+
+
+def _run(
+    session,
+    snapshot,
+    golden,
+    *,
+    feature_set_name: str = FEATURE_SET,
+    params: dict | None = None,
+):
+    """Create an experiment and execute one run of it, returning the run id."""
     sessions = [date.fromisoformat(day) for day in golden["calendar"]]
     # Weekly cross-sections only start once 147 sessions of history exist behind
     # them, which is what the pool policy demands of every member.
     weekly = _weekly(sessions[DEFAULT_POLICY.required_history_days :])
-    feature_set = get_feature_set(FEATURE_SET)
     plan = build_split_plan(
         weekly_observations=weekly, calendar=sessions, **propose_split(weekly)
     )
     policy = DEFAULT_POLICY.__class__(
         **{
-            **{f.name: getattr(DEFAULT_POLICY, f.name) for f in DEFAULT_POLICY.__dataclass_fields__.values()},
+            **{
+                field.name: getattr(DEFAULT_POLICY, field.name)
+                for field in DEFAULT_POLICY.__dataclass_fields__.values()
+            },
             "required_history_days": 147,
             "required_bar_offsets": (147, 21),
         }
     )
     definition = ModelResearchDefinition(
         data_snapshot_id=snapshot.id,
-        feature_set=feature_set,
+        feature_set=get_feature_set(feature_set_name),
         split=plan,
         stock_pool_policy_fingerprint=policy_fingerprint(policy),
-        model_params=resolve_model_params(None, seed=DEFAULT_SEED),
+        model_params=resolve_model_params(params, seed=DEFAULT_SEED),
     )
-    experiment = ResearchExperiment(
-        definition_fingerprint=definition.fingerprint,
-        kind=ResearchExperimentKind.MODEL,
-        data_snapshot_id=snapshot.id,
-        definition=definition.canonical_payload,
+    experiment = session.scalar(
+        select(ResearchExperiment).where(
+            ResearchExperiment.definition_fingerprint == definition.fingerprint
+        )
     )
-    session.add(experiment)
-    session.flush()
+    if experiment is None:
+        # Identical research reuses one experiment, which is what makes the
+        # determinism test below a rerun of the *same* experiment rather than a
+        # comparison of two different ones.
+        experiment = ResearchExperiment(
+            definition_fingerprint=definition.fingerprint,
+            kind=ResearchExperimentKind.MODEL,
+            data_snapshot_id=snapshot.id,
+            definition=definition.canonical_payload,
+        )
+        session.add(experiment)
+        session.flush()
     task = Task(task_type="model_research", status=TaskStatus.RUNNING, payload={})
     session.add(task)
     session.flush()
@@ -299,25 +344,17 @@ def executed(golden, loaded, tmp_path_factory, monkeypatch_module):
     session.add(research_run)
     session.commit()
 
-    root = tmp_path_factory.mktemp("model-golden")
-    settings = Settings(
-        _env_file=None,
-        qlib_data_dir=root / "bundles",
-        research_artifact_dir=root / "artifacts",
-        qlib_threads=1,
-    )
-    monkeypatch_module.setattr("app.core.config.get_settings", lambda: settings)
-    for module in (
-        "app.research.model_workflow",
-        "app.research.bundle_builder",
-        "app.research.publication",
-    ):
-        monkeypatch_module.setattr(f"{module}.get_settings", lambda: settings, raising=False)
-
-    workflow = ModelResearchWorkflow(lambda: session)
-    summary = workflow.execute(research_run.id)
+    summary = ModelResearchWorkflow(lambda: session).execute(research_run.id)
     session.expire_all()
-    return session, research_run.id, summary, plan
+    return research_run.id, summary, plan
+
+
+@pytest.fixture(scope="module")
+def executed(golden, loaded, workspace):
+    """One Alpha158 run; most assertions below read its result."""
+    session, snapshot = loaded
+    run_id, summary, plan = _run(session, snapshot, golden)
+    return session, run_id, summary, plan
 
 
 def _weekly(sessions: list[date]) -> list[date]:
@@ -443,3 +480,152 @@ def test_every_summary_states_how_many_observations_produced_it(executed) -> Non
     _, _, summary, _ = executed
 
     assert all("observations" in item for item in summary["segments"])
+
+
+# --------------------------------------------------------------------------
+# Alpha360
+# --------------------------------------------------------------------------
+
+
+def test_alpha360_completes_the_same_chain(golden, loaded, workspace) -> None:
+    """Alpha360 is selectable, so it has to actually run.
+
+    Registering 360 column names and then refusing the request would satisfy the
+    letter of "the user can choose Alpha158 or Alpha360" and none of its point.
+    The boost rounds are cut back because this is a smoke of the chain, not a
+    search for a better model — 360 columns over ~50 weekly cross-sections is
+    the shape being proven survivable, and the design already says nothing here
+    can show Alpha360 is better on this history.
+    """
+    session, snapshot = loaded
+    run_id, summary, _ = _run(
+        session,
+        snapshot,
+        golden,
+        feature_set_name="alpha360_jp_v1",
+        params={"num_boost_round": 40, "early_stopping_rounds": 10},
+    )
+    run = session.get(ResearchRun, run_id)
+    trained = session.scalar(select(TrainedModel).where(TrainedModel.research_run_id == run_id))
+
+    assert run.status is ResearchRunStatus.SUCCEEDED
+    assert trained.feature_set_name == "alpha360_jp_v1"
+    assert summary["feature_set"] == "alpha360_jp_v1"
+    assert summary["test_observations"] > 0
+
+
+def test_alpha360_publishes_a_missing_rate_row_for_every_column(golden, loaded, workspace) -> None:
+    """Nothing is imputed, and Alpha360's missing structure is the strong case.
+
+    Sixty lags of six fields means a halted security leaves a patterned block of
+    NaNs rather than a scattering, so the per-column, per-segment table is how
+    that stays visible instead of being absorbed into a model.
+    """
+    import pandas as pd
+    from app.core.config import get_settings
+
+    session, snapshot = loaded
+    run_id, _, _ = _run(
+        session,
+        snapshot,
+        golden,
+        feature_set_name="alpha360_jp_v1",
+        params={"num_boost_round": 40, "early_stopping_rounds": 10},
+    )
+    publication = session.scalar(
+        select(ResearchArtifactPublication).where(
+            ResearchArtifactPublication.research_run_id == run_id
+        )
+    )
+    missing = pd.read_parquet(
+        get_settings().research_artifact_dir / publication.relative_path / "feature_missing_rate.parquet"
+    )
+
+    assert set(missing["segment"]) == {"train", "valid", "test"}
+    assert missing["feature_name"].nunique() == len(get_feature_set("alpha360_jp_v1").features)
+
+
+# --------------------------------------------------------------------------
+# Reproducibility, on the real slice rather than synthetic data
+# --------------------------------------------------------------------------
+
+
+def _model_of(session, run_id) -> TrainedModel:
+    return session.scalar(select(TrainedModel).where(TrainedModel.research_run_id == run_id))
+
+
+def test_rerunning_the_same_experiment_reproduces_the_model_byte_for_byte(
+    golden, loaded, workspace, executed
+) -> None:
+    """Same machine, same container, same thread count.
+
+    `test_lgbm_seam.py` shows this on synthetic arrays. It is repeated here
+    because reproducibility is a property of the *pipeline*, not of LightGBM:
+    an unstable column order, a set iterated without sorting, or a timestamp
+    reaching a feature would all break it while leaving the seam test green.
+    """
+    session, first_run_id, _, _ = executed
+    second_run_id, _, _ = _run(session, loaded[1], golden)
+
+    first, second = _model_of(session, first_run_id), _model_of(session, second_run_id)
+
+    assert first.model_checksum == second.model_checksum
+    assert first.model_semantic_checksum == second.model_semantic_checksum
+    assert first.best_iteration == second.best_iteration
+
+
+def test_the_predictions_are_identical_on_a_rerun(golden, loaded, workspace, executed) -> None:
+    import pandas as pd
+    from app.core.config import get_settings
+
+    session, first_run_id, _, _ = executed
+    second_run_id, _, _ = _run(session, loaded[1], golden)
+
+    def predictions(run_id):
+        publication = session.scalar(
+            select(ResearchArtifactPublication).where(
+                ResearchArtifactPublication.research_run_id == run_id
+            )
+        )
+        frame = pd.read_parquet(
+            get_settings().research_artifact_dir / publication.relative_path / "predictions.parquet"
+        )
+        return frame.sort_values(["observation_date", "instrument_id"]).reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(predictions(first_run_id), predictions(second_run_id))
+
+
+def test_a_different_thread_count_keeps_the_model_but_not_the_file(
+    golden, loaded, workspace, executed
+) -> None:
+    """The distinction `TrainedModel` carries two checksums for.
+
+    `deterministic` plus `force_row_wise` give the same trees at any thread
+    count, but LightGBM writes `[num_threads: N]` into `model.txt`. Asserting
+    file equality across thread counts would fail for a reason that has nothing
+    to do with the model; asserting only semantic equality would miss a genuine
+    change. Both are stated.
+    """
+    session, first_run_id, _, _ = executed
+    first = _model_of(session, first_run_id)
+
+    workspace["settings"] = Settings(
+        _env_file=None,
+        qlib_data_dir=workspace["settings"].qlib_data_dir,
+        research_artifact_dir=workspace["settings"].research_artifact_dir,
+        qlib_threads=4,
+    )
+    try:
+        threaded_run_id, _, _ = _run(session, loaded[1], golden)
+    finally:
+        workspace["settings"] = Settings(
+            _env_file=None,
+            qlib_data_dir=workspace["settings"].qlib_data_dir,
+            research_artifact_dir=workspace["settings"].research_artifact_dir,
+            qlib_threads=1,
+        )
+    threaded = _model_of(session, threaded_run_id)
+
+    assert threaded.model_semantic_checksum == first.model_semantic_checksum
+    assert threaded.model_checksum != first.model_checksum
+    assert threaded.best_iteration == first.best_iteration

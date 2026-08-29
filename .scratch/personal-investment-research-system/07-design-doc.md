@@ -439,21 +439,32 @@ _callable = getattr(module, cls)          # 可加载任意模块的任意属性
 
 即 `{"class": "任意名", "module_path": "任意.模块"}` 能加载任何东西。使用 Qlib 的 handler 就绕不开这个机制，因此边界必须由调用方守住：喂给它的 `class`、`module_path` 和 `kwargs` **全部是模块级常量**，不经过任何请求体、数据库字段或配置文件。这是 06 "用户不能提交任意表达式、类路径或 workflow 配置"在 07 的具体落点。
 
-### 7.2 recorder 目录
+### 7.2 recorder：内存，不落盘
 
-`LGBModel.fit()` 内部调用 `R.log_metrics`，`R.get_exp(create=True)` 会自动创建一个本地 MLflow 目录。Qlib 的默认 uri 是 `file:<cwd>/mlruns`——**不配置就会写进 worker 的工作目录**。
+**本节的前提在实施时被环境推翻，结论因此改变。**
 
-因此：
+原方案是：`LGBModel.fit()` 内部调用 `R.log_metrics`，会创建本地 MLflow 目录，所以把 uri 指向受控路径 `settings.qlib_recorder_dir/{run_id}`，运行结束删除。
 
-- 通过 `qlib.init` 的 `exp_manager` 把 uri 显式指向受控路径 `settings.qlib_recorder_dir/{run_id}`；
-- 训练在显式的 recorder 作用域内进行；
-- 训练结束后以 `LGBModel.predict(dataset, segment=...)` 分别生成 train / valid 分数；test 分数由 `SignalRecord(model, dataset, recorder).generate()` 生成并保存为 recorder 的 `pred.pkl`，同时生成 `label.pkl`；
-- `SigAnaRecord(recorder).generate()` 必须在 `SignalRecord` 成功后调用。pyqlib 0.9.7 的 `SigAnaRecord` 依赖 `pred.pkl` / `label.pkl`，缺少父记录时只会跳过，不能把“没有抛异常”误判为分析成功；
-- `SignalRecord` 的 test `pred.pkl` 是 §8 `PredictionRun` 的权威原始分数来源，应用把它规范化为 `predictions.parquet`；不得再走第二次独立 test 推理。train / valid 分数仍通过同一个 `LGBModel.predict` interface 取得；
-- `SigAnaRecord` 只负责 Qlib 自身的 test IC/Rank IC 记录与栈集成证明；产品展示的 train / valid / test 指标仍全部经过 §9.2 的本地统一统计 module。集成测试断言 `SigAnaRecord` 的 test IC/Rank IC 与本地统计在相同有效行上、给定容差内一致；
-- **运行结束后删除该子目录**。所有需要长期保存的东西（valid 曲线、指标、模型）都已规范化写进 `ResearchArtifact`，留着那个目录唯一的作用是诱惑后来者去读 Qlib 的内部布局——正是 06 明确否决过的事；
-- 配置开关 `keep_qlib_recorder_dir`（默认 `false`）供调试，开启时页面标注"调试产物，非接口"；
-- 该目录的路径不出现在任何 API 响应中。
+实施时发现 **mlflow 3.15.2 直接拒绝打开文件系统 tracking store**：
+
+```text
+MlflowException: The filesystem tracking backend (e.g., './mlruns') is in
+maintenance mode and will not receive further updates.
+```
+
+设 `MLFLOW_ALLOW_FILE_STORE=true` 可以绕过，但那是把训练绑在其维护者已明确冻结的后端上，只为了填一个本设计**本来就要删除、且从不读取**的目录。
+
+因此改为：
+
+- **不创建任何 recorder 目录**，也没有 `qlib_recorder_dir` 配置项；
+- `CancellableLGBModel.fit()` **去掉基类那段 `R.log_metrics` 回放**。没有信息损失：`evals_result` 里是同一批数字，落为 `training_curve.parquet`，那才是持久形式；
+- `SignalRecord` 与 `SigAnaRecord` 跑在 06 已有的 `_MemoryRecorder` 上（`qlib_runtime.run_signal_analysis`）。`SignalRecord.generate()` 只调用 `recorder.save_objects`，内存 recorder 完全够用；
+- test 段的 `pred.pkl` 仍是 §8 `PredictionRun` 的权威分数来源，不做第二次独立推理——两次推理可能漂移而无人察觉；
+- `SigAnaRecord` 只覆盖 test 段，产品展示的三段指标仍全部经 §9.2 的本地统一统计 module。
+
+**`SigAnaRecord` 的跳过是静默的**，必须检查返回值而非异常：`ACRecordTemp.generate()` 在依赖缺失时 catch 掉 `FileNotFoundError`、打一条 warning、返回 `None`。把"没有抛异常"当作"分析已执行"会把空结果报成成功。
+
+这个改动比原方案更贴近 §7.2 的本意——原方案的结论就是"那个目录不得留存、不得成为 interface"，而根本不创建它是这句话最彻底的实现。
 
 ### 7.3 processors
 
@@ -1002,6 +1013,17 @@ resolved = snapshot_member_query(..., trade_dates=dates).subquery()
 ```
 
 证券数取 **约 150 只**：要保证每个计入汇总的截面有 ≥100 只有效证券且覆盖率 ≥90%，必须为退市、停牌、流动性不足和历史不足留出余量。
+
+#### 选取标准：完整路径中按流动性排序
+
+只说"约 150 只"是不够的，实施时第一版按**价格路径完整度**排序选取，结果 150 只里**只有 80 只**过得了 500M 日元流动性门槛——每个截面都达不到 `min_valid_securities = 100`，运行必然以 `no_valid_test_cross_section` 失败。这是一份**永远不可能通过的 fixture**。
+
+正确标准是两条一起：
+
+- **路径完整**（硬性）：缺一半交易日的证券能触发缺失值路径，但撑不起 60 日滚动窗口；
+- **流动性最高**：股票池在打分之前先施加 500M 日元 20 日均成交额下限。
+
+代价必须写明：**这个切片是 Prime 的高流动性一端，因此不检验流动性过滤的拒绝路径。** 那由 05 的全市场 fixture 覆盖——这是两份 fixture 必须分开的又一个理由。
 
 **新增的 07 fixture 不会因此变臃肿**：150 × 262 ≈ 39,300 行，与 05 fixture 当前的 35,918 行相当。换来的是 23 个离散点变成 262 个连续交易日——新增文件的行数仍可控，但它第一次能支撑连续 rolling 特征与完整的三段切分。
 
