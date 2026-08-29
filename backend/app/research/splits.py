@@ -41,11 +41,19 @@ class Segment:
     observations: tuple[date, ...]
 
     def as_payload(self) -> dict:
+        """The part of a segment that belongs to the experiment's identity.
+
+        The observation dates and their count are deliberately absent: they are
+        derived from the boundaries plus the snapshot's trading calendar, so
+        including them would make the definition carry a fact it does not
+        choose. It would also make the definition impossible to rebuild from
+        storage without re-reading the calendar, which is exactly what
+        `compile_execution_spec` must be able to do before touching any data.
+        """
         return {
             "name": self.name,
             "start": self.start.isoformat(),
             "end": self.end.isoformat(),
-            "observation_count": len(self.observations),
         }
 
 
