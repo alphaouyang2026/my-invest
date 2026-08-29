@@ -1,4 +1,5 @@
 import DataCenter from './data-center'
+import ModelResearchCenter from './model-research-center'
 import ResearchCenter from './research-center'
 
 export default function Home() {
@@ -11,6 +12,7 @@ export default function Home() {
       </header>
       <DataCenter />
       <ResearchCenter />
+      <ModelResearchCenter />
     </main>
   );
 }
