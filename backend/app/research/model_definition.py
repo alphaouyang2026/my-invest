@@ -34,6 +34,13 @@ WEEKLY_LABEL_DEFINITION = "next_rebalance_open_to_next_rebalance_open"
 MIN_COVERAGE = 0.90
 MIN_VALID_SECURITIES = 100
 GROUP_COUNT = 5
+MOMENTUM_LOOKBACK_DAYS = 147
+MOMENTUM_SKIP_DAYS = 21
+
+
+def model_required_history_days(feature_set: FeatureSet) -> int:
+    """History needed by either the selected features or the 6-1 control."""
+    return max(feature_set.max_window, MOMENTUM_LOOKBACK_DAYS)
 
 #: Fixed by the design, and not reachable through the override whitelist.
 #: `objective` is the research target; the other two are what make the run
@@ -187,7 +194,7 @@ class ModelResearchDefinition:
     def required_history_days(self) -> int:
         # The momentum control needs 147 sessions whatever the feature set asks
         # for, because it is computed on the same cross-sections for comparison.
-        return max(self.feature_set.max_window, 147)
+        return model_required_history_days(self.feature_set)
 
     @property
     def canonical_payload(self) -> dict[str, Any]:

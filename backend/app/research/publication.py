@@ -79,7 +79,13 @@ class ResearchArtifactPublisher:
 
     def __init__(self, session: Session, root: Path) -> None:
         self.session = session
-        self.root = Path(root)
+        # Resolved on the way in, because the containment guard below compares
+        # against `final.resolve()`. The configured default is *relative*
+        # (`var/research-artifacts`), so leaving it unresolved makes that guard
+        # compare a relative root against an absolute parent list and reject
+        # every path, including the legitimate one. `ResearchArtifactReader`
+        # resolves for the same reason.
+        self.root = Path(root).resolve()
 
     # -- step 1 + 2 --------------------------------------------------------
 
@@ -220,7 +226,9 @@ def recover_publications(session: Session, root: Path) -> list[uuid.UUID]:
     Called at worker start, before any task is picked up, so no run observes a
     half-published artifact. Returns the runs that were failed.
     """
-    root = Path(root)
+    # Same reason as the publisher's constructor: the configured default is a
+    # relative path, and everything downstream compares against resolved ones.
+    root = Path(root).resolve()
     failed: list[uuid.UUID] = []
     pending = session.scalars(
         select(ResearchArtifactPublication).where(

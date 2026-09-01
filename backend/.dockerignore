@@ -1,8 +1,11 @@
 .venv/
 __pycache__/
 *.pyc
-.pytest_cache/
-.pytest-tmp*/
+# Every pytest scratch dir, whatever the run named it. These land with 0o700
+# and Docker cannot read them, so a stray one fails the build context with
+# "Access is denied" — the same permission trap the Dockerfile's reloader
+# comment describes. A prefix glob covers names future runs invent.
+.pytest*/
 .mypy_cache/
 .ruff_cache/
 .git/

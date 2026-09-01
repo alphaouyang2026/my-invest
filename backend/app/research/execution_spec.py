@@ -41,6 +41,7 @@ from app.research.feature_sets import FeatureSet, UnknownFeatureSetError, get_fe
 from app.research.model_definition import (
     ModelResearchDefinition,
     WEEKLY_LABEL_DEFINITION,
+    model_required_history_days,
     processor_payload,
 )
 from app.research.splits import Segment, SplitPlan
@@ -93,7 +94,7 @@ class ModelExecutionSpec:
 
     @property
     def required_history_days(self) -> int:
-        return max(self.feature_set.max_window, 147)
+        return model_required_history_days(self.feature_set)
 
     @property
     def inference_contract(self) -> dict[str, Any]:

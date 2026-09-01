@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -275,3 +276,54 @@ def test_abandoning_a_prepared_publication_removes_its_bytes(db_session, tmp_pat
     assert publication.status is ArtifactPublicationStatus.FAILED
     assert not (tmp_path / f"{STAGING_PREFIX}{run.id}").exists()
     assert not (tmp_path / str(run.id)).exists()
+
+
+def test_a_relative_artifact_root_publishes(db_session, tmp_path, run, monkeypatch) -> None:
+    """The configured default is relative, and every other test hides that.
+
+    `tmp_path` is absolute, so the containment guard in `_move_into_place`
+    always had an absolute root to compare against. Production runs on
+    `var/research-artifacts` straight out of `Settings`, where an unresolved
+    root made the guard compare a relative path against an absolute parent
+    list, reject its own legitimate target, and fail every publish with
+    "Artifact path escapes the configured root".
+    """
+    monkeypatch.chdir(tmp_path)
+    relative = Path("var/research-artifacts")
+    relative.mkdir(parents=True)
+
+    publisher = ResearchArtifactPublisher(db_session, relative)
+    prepared = publisher.prepare(
+        run,
+        tables=_tables(),
+        summary={},
+        warnings=[],
+        runtime_identity={"pyqlib_version": "0.9.7"},
+    )
+    db_session.add(publisher.artifact_row(prepared))
+    run.status = ResearchRunStatus.SUCCEEDED
+    db_session.commit()
+
+    publisher.commit(prepared)
+
+    publication = db_session.get(ResearchArtifactPublication, prepared.publication_id)
+    assert publication.status is ArtifactPublicationStatus.COMMITTED
+    assert (relative / str(run.id)).is_dir()
+
+
+def test_a_path_that_really_escapes_is_still_refused(db_session, tmp_path, run) -> None:
+    """The guard has to keep working after being made to accept relative roots."""
+    publisher = ResearchArtifactPublisher(db_session, tmp_path)
+    prepared = publisher.prepare(
+        run,
+        tables=_tables(),
+        summary={},
+        warnings=[],
+        runtime_identity={},
+    )
+    publication = db_session.get(ResearchArtifactPublication, prepared.publication_id)
+    publication.relative_path = "../escaped"
+    db_session.commit()
+
+    with pytest.raises(PublicationError, match="escapes the configured root"):
+        publisher.commit(prepared)

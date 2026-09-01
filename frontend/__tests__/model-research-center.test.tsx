@@ -65,20 +65,51 @@ const RESULTS = {
     { segment: 'valid', feature_name: 'DRIFTED', missing_rate: 0.20 },
     { segment: 'test', feature_name: 'DRIFTED', missing_rate: 0.40 },
   ],
+  feature_group_anomalies: [],
   training_curve: [{ dataset: 'valid', metric: 'l2', iteration: 0, value: 0.9 }],
 }
 
-function stubApi(overrides: Record<string, unknown> = {}) {
+const RANKED = [
+  {
+    observation_date: '2026-05-22', instrument_id: 'aaaaaaaa-1111-2222-3333-444444444444',
+    source_code: '72030', raw_score: 0.42, average_rank: 1, rank_percentile: 1.0,
+    normalized_score: 1.8, label_status: 'valid',
+  },
+  {
+    observation_date: '2026-05-22', instrument_id: 'bbbbbbbb-1111-2222-3333-444444444444',
+    source_code: null, raw_score: -0.11, average_rank: 2, rank_percentile: 0.5,
+    normalized_score: -0.4, label_status: 'label_not_matured',
+  },
+]
+
+function stubApi(
+  overrides: Record<string, unknown> = {},
+  rankedScores: unknown = { observation_date: null, scores: [] },
+) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') return ok({ id: 'run-1', status: 'queued', processed_dates: 0, total_dates: 0, warnings: [] })
     if (url.includes('/research/model-runs/config')) return ok({ ...CONFIG, ...overrides })
     if (url.includes('/results')) return ok(RESULTS)
-    if (url.includes('/ranked-scores')) return ok({ observation_date: null, scores: [] })
+    if (url.includes('/ranked-scores')) return ok(rankedScores)
     if (url.includes('/research/runs')) return ok([SUCCEEDED_RUN])
     return ok([])
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+function scoreRows(date: string, count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => ({
+    observation_date: date,
+    instrument_id: `${prefix}-${String(index + 1).padStart(2, '0')}`,
+    raw_score: count - index,
+    average_rank: count - index,
+    rank_percentile: (count - index) / count,
+    normalized_score: 1 - index / count,
+    label_status: index === count - 1 ? 'label_not_matured' : 'valid',
+    trained_model_id: 'model-1',
+    data_snapshot_id: 'snapshot-1',
+  }))
 }
 
 test('the creation form submits explicit segment dates and a top-level seed', async () => {
@@ -117,7 +148,7 @@ test('choosing alpha360 shows that it is experimental', async () => {
 
   render(<ModelResearchCenter />)
   await screen.findByRole('option', { name: /alpha360_jp_v1/ })
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alpha360_jp_v1' } })
+  fireEvent.change(screen.getByLabelText('特征集'), { target: { value: 'alpha360_jp_v1' } })
 
   expect(await screen.findByText(/实验性特征集/)).toBeInTheDocument()
 })
@@ -193,4 +224,68 @@ test('the page says scores carry no return unit', async () => {
   render(<ModelResearchCenter />)
 
   expect(await screen.findByText(/没有收益量纲/)).toBeInTheDocument()
+})
+
+test('ranked scores default to the latest cross-section top 20 and can switch dates', async () => {
+  stubApi({}, {
+    observation_date: null,
+    scores: [
+      ...scoreRows('2025-08-01', 5, 'OLD'),
+      ...scoreRows('2025-08-08', 25, 'LATEST'),
+    ],
+  })
+
+  render(<ModelResearchCenter />)
+
+  expect(await screen.findByRole('heading', { name: /RankedScores · 2025-08-08/ })).toBeInTheDocument()
+  expect(screen.getByText('LATEST-01')).toBeInTheDocument()
+  expect(screen.getByText('LATEST-20')).toBeInTheDocument()
+  expect(screen.queryByText('LATEST-21')).not.toBeInTheDocument()
+  expect(screen.queryByText('OLD-01')).not.toBeInTheDocument()
+
+  fireEvent.change(screen.getByLabelText('预测日期'), { target: { value: '2025-08-01' } })
+  expect(await screen.findByText('OLD-01')).toBeInTheDocument()
+  expect(screen.queryByText('LATEST-01')).not.toBeInTheDocument()
+})
+
+test('the full ranked-score view paginates without truncating the selected cross-section', async () => {
+  stubApi({}, {
+    observation_date: null,
+    scores: scoreRows('2025-08-08', 55, 'SCORE'),
+  })
+
+  render(<ModelResearchCenter />)
+  await screen.findByText('SCORE-01')
+  fireEvent.click(screen.getByRole('button', { name: '全部' }))
+
+  expect(screen.getByText('SCORE-50')).toBeInTheDocument()
+  expect(screen.queryByText('SCORE-51')).not.toBeInTheDocument()
+  expect(screen.getByText('第 1 / 2 页 · 共 55 条')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+  expect(await screen.findByText('SCORE-51')).toBeInTheDocument()
+  expect(screen.getByText('SCORE-55')).toBeInTheDocument()
+  expect(screen.queryByText('SCORE-50')).not.toBeInTheDocument()
+})
+
+
+test('ranked scores show the security code without dropping the stable identity', async () => {
+  stubApi({}, { observation_date: null, scores: RANKED })
+
+  render(<ModelResearchCenter />)
+
+  // The code is what a person can act on; the UUID is what ticket 08 keys on,
+  // and a ticker can be reassigned between dates, so both stay on the row.
+  expect(await screen.findByText('72030')).toBeInTheDocument()
+  expect(screen.getByText('aaaaaaaa-1111-2222-3333-444444444444')).toBeInTheDocument()
+})
+
+test('a prediction with no security code still renders', async () => {
+  stubApi({}, { observation_date: null, scores: RANKED })
+
+  render(<ModelResearchCenter />)
+  await screen.findByText('72030')
+
+  // A missing code is a display gap, not a reason to hide a score.
+  expect(screen.getByText('bbbbbbbb-1111-2222-3333-444444444444')).toBeInTheDocument()
 })

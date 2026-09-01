@@ -938,7 +938,7 @@ cancel_callback.before_iteration = False
 3. LightGBM 与 6-1 动量并排两列，共享行标签；
 4. 特征重要性默认 top 20 by gain，可展开全部；同屏给"gain 为 0 的特征数"；
 5. 缺失率表默认只显示异常项（test 段缺失率比 train 段高 10 个百分点以上），可展开所选 FeatureSet 的全部列——158/360 行全部铺开没人看，筛出来的十几行才是信息；
-6. 排名列表按 `rank_percentile` 排序、分页、不做 top-N 截断；分数显示为位次百分比，**不加百分号、不写"预期收益"**；
+6. 排名列表先选择单个 `prediction_date`，默认显示该截面的 Top 20，并可切换 Top 50 或全量分页；Top-N 只是页面视图过滤，API、artifact 与 PredictionRun 保持全量，不得把它解释为 08 的选股或组合决策；`rank_percentile` 可以使用百分号显示，但必须明确表示截面内相对位置，**不写“预期收益”**；
 7. 训练曲线：valid loss vs iteration，标出 `best_iteration`；
 8. 警告置顶不折叠。
 

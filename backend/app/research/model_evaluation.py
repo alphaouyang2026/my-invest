@@ -20,6 +20,7 @@ obtained by re-ranking within a cross-section, is a position.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict
 from datetime import date
 
@@ -72,6 +73,38 @@ def score_frame(predictions: pd.Series) -> pd.DataFrame:
         else 0.0
     )
     return frame
+
+
+def prediction_frame(
+    scores: pd.DataFrame,
+    labels: pd.DataFrame,
+    *,
+    trained_model_id: uuid.UUID,
+    data_snapshot_id: uuid.UUID,
+) -> pd.DataFrame:
+    """Attach evaluation state and provenance to every published prediction.
+
+    The security code is deliberately absent. It lives on `instruments` as
+    `source_code`, one row per identity, and is resolved when the scores are
+    read (`SqlModelResearchApplication.get_ranked_scores`). Copying it into the
+    artifact would freeze a display label into an immutable file and add a join
+    to every publish for something a reader can look up.
+    """
+    statuses = labels[["observation_date", "instrument_id", "label", "label_reason"]].copy()
+    statuses["label_status"] = statuses["label_reason"].where(
+        statuses["label_reason"].notna(),
+        statuses["label"].map(lambda value: "valid" if pd.notna(value) else "label_unavailable"),
+    )
+    published = scores.merge(
+        statuses[["observation_date", "instrument_id", "label_status"]],
+        on=["observation_date", "instrument_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    published["label_status"] = published["label_status"].fillna("label_unavailable")
+    published["trained_model_id"] = str(trained_model_id)
+    published["data_snapshot_id"] = str(data_snapshot_id)
+    return published
 
 
 def evaluate_segment(

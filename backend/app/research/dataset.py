@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from app.core.logging import get_logger
@@ -43,6 +44,7 @@ logger = get_logger(__name__)
 #: Qlib's conventional single-label column name; `SignalRecord` and
 #: `SigAnaRecord` both assume it.
 LABEL_COLUMN = "LABEL0"
+MISSING_RATE_DRIFT_THRESHOLD = 0.10
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,12 @@ class AssembledDataset:
     #: train and 40% missing in test is a data problem wearing a model's
     #: clothes, and only this table shows it.
     missing_rate: pd.DataFrame
+    #: Full label audit, including rows whose future outcome is not mature or
+    #: whose entry/exit price is structurally missing.
+    labels: pd.DataFrame
+    #: Root-cause counts for current values that invalidate a whole Alpha360
+    #: lag group, kept separate from the per-column missing-rate table.
+    feature_group_anomalies: pd.DataFrame
     feature_rows: int
     label_rows: int
     #: The window declared to `check_transform_proc`. Carried explicitly because
@@ -81,7 +89,7 @@ def build_dataset(
     feature_set = spec.feature_set
     # `$open` rides along with the feature expressions so the label can be built
     # from the same read rather than a second pass over the bundle.
-    fields = list(feature_set.expressions) + ["$open"]
+    fields = list(dict.fromkeys([*feature_set.expressions, "$open", "$close", "$volume"]))
     raw = read_features(
         bundle_path,
         instruments="all",
@@ -91,7 +99,10 @@ def build_dataset(
     )
 
     opens = _matrix(raw, "$open")
-    labels = calculate_weekly_labels(opens, weekly_observation_dates=list(weekly_observations))
+    labels = _restrict_label_rows(
+        calculate_weekly_labels(opens, weekly_observation_dates=list(weekly_observations)),
+        universe,
+    )
 
     features = raw[list(feature_set.expressions)].copy()
     features.columns = list(feature_set.column_names)
@@ -100,6 +111,9 @@ def build_dataset(
     # once here rather than defended against in each of them.
     features = features.swaplevel().sort_index()
     features = _restrict_to_universe(features, universe)
+
+    current_values = raw[["$close", "$volume"]].copy().swaplevel().sort_index()
+    current_values = _restrict_to_universe(current_values, universe)
 
     label_frame = (
         labels.loc[labels["label"].notna(), ["observation_date", "instrument_id", "label"]]
@@ -117,6 +131,7 @@ def build_dataset(
     label_frame = _restrict_to_universe(label_frame, universe)
 
     missing_rate = _missing_rate(features, spec)
+    feature_group_anomalies = _feature_group_anomalies(current_values, spec)
 
     # `check_transform_proc` is Qlib's own mechanism for "this processor may
     # only fit on the training range": it injects the window into any processor
@@ -166,6 +181,8 @@ def build_dataset(
         handler=handler,
         dataset=dataset,
         missing_rate=missing_rate,
+        labels=labels,
+        feature_group_anomalies=feature_group_anomalies,
         feature_rows=len(features),
         label_rows=len(label_frame),
         fit_window=(spec.fit_start, spec.fit_end),
@@ -197,6 +214,19 @@ def _restrict_to_universe(frame: pd.DataFrame, universe: dict[date, set[str]]) -
     return frame.loc[keep]
 
 
+def _restrict_label_rows(
+    labels: pd.DataFrame,
+    universe: dict[date, set[str]],
+) -> pd.DataFrame:
+    keep = [
+        instrument_id in universe.get(observation_date, ())
+        for observation_date, instrument_id in zip(
+            labels["observation_date"], labels["instrument_id"]
+        )
+    ]
+    return labels.loc[keep].reset_index(drop=True)
+
+
 def _missing_rate(features: pd.DataFrame, spec: ModelExecutionSpec) -> pd.DataFrame:
     rows: list[dict] = []
     stamps = features.index.get_level_values("datetime")
@@ -217,3 +247,49 @@ def _missing_rate(features: pd.DataFrame, spec: ModelExecutionSpec) -> pd.DataFr
             for name, value in fractions.items()
         )
     return pd.DataFrame(rows)
+
+
+def _feature_group_anomalies(
+    current_values: pd.DataFrame,
+    spec: ModelExecutionSpec,
+) -> pd.DataFrame:
+    """Count root-cause rows that invalidate an Alpha360 lag group at once."""
+    rows: list[dict] = []
+    stamps = current_values.index.get_level_values("datetime")
+    groups = (("price_lags", "$close"), ("volume_lags", "$volume"))
+    for segment in spec.split.segments:
+        window = current_values.loc[
+            (stamps >= pd.Timestamp(segment.start)) & (stamps <= pd.Timestamp(segment.end))
+        ]
+        for feature_group, source_field in groups:
+            values = pd.to_numeric(window[source_field], errors="coerce")
+            invalid = values.isna() | ~np.isfinite(values) | (values <= 0)
+            rows.append(
+                {
+                    "segment": segment.name,
+                    "feature_group": feature_group,
+                    "source_field": source_field.removeprefix("$"),
+                    "invalid_rows": int(invalid.sum()),
+                    "rows": len(window),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def missing_rate_drift(
+    missing_rate: pd.DataFrame,
+    *,
+    threshold: float = MISSING_RATE_DRIFT_THRESHOLD,
+) -> pd.DataFrame:
+    """Columns whose test missing rate exceeds train by the warning threshold."""
+    columns = ["feature_name", "train_missing_rate", "test_missing_rate", "drift"]
+    if missing_rate.empty:
+        return pd.DataFrame(columns=columns)
+    pivot = missing_rate.pivot(index="feature_name", columns="segment", values="missing_rate")
+    if not {"train", "test"} <= set(pivot.columns):
+        return pd.DataFrame(columns=columns)
+    drift = (pivot["test"] - pivot["train"]).rename("drift")
+    result = pivot.assign(drift=drift).loc[drift > threshold, ["train", "test", "drift"]]
+    return result.rename(
+        columns={"train": "train_missing_rate", "test": "test_missing_rate"}
+    ).reset_index()

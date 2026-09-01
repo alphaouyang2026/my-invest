@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.market_data import DataSnapshot, TradingCalendar
+from app.models.market_data import DataSnapshot, Instrument, TradingCalendar
 from app.models.research import (
     ACTIVE_RESEARCH_STATUSES,
     PredictionRun,
@@ -40,9 +40,11 @@ from app.research.model_definition import (
     DEFAULT_FEATURE_SET,
     DEFAULT_SEED,
     LOCKED_PARAMS,
+    MOMENTUM_SKIP_DAYS,
     OVERRIDABLE_PARAMS,
     ModelResearchDefinition,
     ParameterError,
+    model_required_history_days,
     resolve_model_params,
 )
 from app.research.publication import readable_artifact
@@ -78,6 +80,7 @@ class SqlModelResearchApplication:
                 "is_default": item.is_default,
                 "maturity": item.maturity,
                 "definition_checksum": item.definition_checksum,
+                "columns": [feature.as_payload() for feature in item.features],
             }
             for item in list_feature_sets()
         ]
@@ -160,10 +163,11 @@ class SqlModelResearchApplication:
             # not, while the fingerprint records the other one.
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+        required_history_days = model_required_history_days(feature_set)
         policy = replace(
             DEFAULT_POLICY,
-            required_history_days=max(feature_set.max_window, 147),
-            required_bar_offsets=(max(feature_set.max_window, 147), 21),
+            required_history_days=required_history_days,
+            required_bar_offsets=(required_history_days, MOMENTUM_SKIP_DAYS),
         )
         definition = ModelResearchDefinition(
             data_snapshot_id=snapshot.id,
@@ -241,6 +245,7 @@ class SqlModelResearchApplication:
                     "metrics",
                     "feature_importance",
                     "feature_missing_rate",
+                    "feature_group_anomalies",
                     "training_curve",
                     "qlib_signal_analysis",
                 )
@@ -257,6 +262,12 @@ class SqlModelResearchApplication:
         run, artifact = self._published(run_id)
         reader = ResearchArtifactReader(get_settings().research_artifact_dir)
         scores = reader.table(artifact.relative_path, "predictions")
+        # The security code is resolved here rather than stored in the artifact.
+        # It lives on `instruments.source_code` — one row per stable identity —
+        # so a published artifact carries the identity and the display label is
+        # looked up, which also makes every already-published run readable
+        # without a re-run.
+        scores["source_code"] = scores["instrument_id"].map(_instrument_codes(self.session))
         if observation_date is not None:
             values = scores["observation_date"].astype(str)
             scores = scores[values == observation_date.isoformat()]
@@ -350,3 +361,19 @@ class SqlModelResearchApplication:
 
 def _records(frame) -> list[dict]:
     return json.loads(frame.to_json(orient="records", date_format="iso"))
+
+
+def _instrument_codes(session: Session) -> dict[str, str]:
+    """`instrument_id` -> `source_code`, the code the source knows a security by.
+
+    Read from `instruments`, which is the table that owns the mapping: one row
+    per stable identity. The per-snapshot roster carries the same string today,
+    but it is scoped to a roster and would need a date to join on, for a value
+    that does not vary by date here.
+    """
+    return {
+        str(instrument_id): source_code
+        for instrument_id, source_code in session.execute(
+            select(Instrument.instrument_id, Instrument.source_code)
+        ).all()
+    }

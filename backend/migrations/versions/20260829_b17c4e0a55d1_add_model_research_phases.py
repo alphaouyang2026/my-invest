@@ -15,6 +15,10 @@ partial predicate names both new labels, so the labels have to be committed by
 then. Alembic runs each revision in its own transaction, which is exactly the
 separation needed — splitting is cheaper and more obviously correct than
 casting the predicate to text to dodge the enum.
+
+This is the documented exception to model autogeneration: Alembic does not
+detect native PostgreSQL enum label changes, so this revision contains only the
+manual enum operation that autogenerate cannot emit.
 """
 
 from typing import Sequence, Union

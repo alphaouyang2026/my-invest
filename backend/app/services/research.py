@@ -237,6 +237,12 @@ class SqlResearchApplication:
         reader = ResearchArtifactReader(get_settings().research_artifact_dir)
         scores = reader.table(artifact.relative_path, "scores")
         exclusions = reader.table(artifact.relative_path, "exclusions")
+        # Same source as a model run's ranked scores, so both kinds return the
+        # same field (design section 8.2): `instruments.source_code`, resolved
+        # at read time rather than frozen into the artifact.
+        from app.services.model_research import _instrument_codes
+
+        scores["source_code"] = scores["instrument_id"].map(_instrument_codes(self.session))
         if observation_date is not None:
             values = scores["observation_date"].astype(str)
             scores = scores[values == observation_date.isoformat()]

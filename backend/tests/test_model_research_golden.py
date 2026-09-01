@@ -76,7 +76,7 @@ GOLDEN = Path(__file__).parent / "data" / "model_research_golden.json.gz"
 pytestmark = [
     # Five real training runs, about three and a half minutes. Opt-in via
     # `--slow`; see the collection hook in conftest.
-    pytest.mark.slow,
+    # pytest.mark.slow,
     pytest.mark.skipif(not GOLDEN.exists(), reason="golden fixture not exported"),
 ]
 
@@ -431,6 +431,28 @@ def test_a_trained_model_and_a_prediction_run_are_recorded(executed) -> None:
     assert predictions.row_count > 0
 
 
+def test_prediction_rows_carry_label_state_and_provenance(executed) -> None:
+    import pandas as pd
+    from app.core.config import get_settings
+
+    session, run_id, _, _ = executed
+    trained = session.scalar(select(TrainedModel).where(TrainedModel.research_run_id == run_id))
+    prediction = session.scalar(select(PredictionRun).where(PredictionRun.research_run_id == run_id))
+    publication = session.scalar(
+        select(ResearchArtifactPublication).where(
+            ResearchArtifactPublication.research_run_id == run_id
+        )
+    )
+    frame = pd.read_parquet(
+        get_settings().research_artifact_dir / publication.relative_path / "predictions.parquet"
+    )
+
+    assert {"label_status", "trained_model_id", "data_snapshot_id"} <= set(frame.columns)
+    assert set(frame["trained_model_id"]) == {str(trained.id)}
+    assert set(frame["data_snapshot_id"]) == {str(prediction.data_snapshot_id)}
+    assert "label_not_matured" in set(frame["label_status"])
+
+
 def test_the_artifact_is_committed_and_its_bytes_are_on_disk(executed) -> None:
     """The publish protocol's whole point, exercised by a real run."""
     session, run_id, _, _ = executed
@@ -517,6 +539,7 @@ def test_alpha360_completes_the_same_chain(golden, loaded, workspace) -> None:
     assert trained.feature_set_name == "alpha360_jp_v1"
     assert summary["feature_set"] == "alpha360_jp_v1"
     assert summary["test_observations"] > 0
+    assert "experimental_feature_set" in {warning["code"] for warning in run.warnings}
 
 
 def test_alpha360_publishes_a_missing_rate_row_for_every_column(golden, loaded, workspace) -> None:
@@ -545,9 +568,16 @@ def test_alpha360_publishes_a_missing_rate_row_for_every_column(golden, loaded, 
     missing = pd.read_parquet(
         get_settings().research_artifact_dir / publication.relative_path / "feature_missing_rate.parquet"
     )
+    group_anomalies = pd.read_parquet(
+        get_settings().research_artifact_dir
+        / publication.relative_path
+        / "feature_group_anomalies.parquet"
+    )
 
     assert set(missing["segment"]) == {"train", "valid", "test"}
     assert missing["feature_name"].nunique() == len(get_feature_set("alpha360_jp_v1").features)
+    assert set(group_anomalies["feature_group"]) == {"price_lags", "volume_lags"}
+    assert set(group_anomalies["segment"]) == {"train", "valid", "test"}
 
 
 # --------------------------------------------------------------------------

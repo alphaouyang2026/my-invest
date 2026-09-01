@@ -20,6 +20,7 @@ from datetime import date
 
 import pytest
 
+from app.research.feature_sets import get_feature_set
 from app.research.model_definition import DEFAULT_SEED
 
 BASE = "/api/v1/research"
@@ -46,6 +47,17 @@ def _payload(snapshot_id: str, **overrides) -> dict:
 # --------------------------------------------------------------------------
 
 
+def test_model_research_routes_are_published_in_openapi(client) -> None:
+    paths = set(client.get("/openapi.json").json()["paths"])
+
+    assert {
+        f"{BASE}/feature-sets",
+        f"{BASE}/model-runs/config",
+        f"{BASE}/model-runs",
+        f"{BASE}/model-runs/{{run_id}}/results",
+    } <= paths
+
+
 def test_the_feature_set_registry_is_exposed_read_only(client) -> None:
     response = client.get(f"{BASE}/feature-sets")
 
@@ -53,6 +65,11 @@ def test_the_feature_set_registry_is_exposed_read_only(client) -> None:
     sets = {item["name"]: item for item in response.json()}
     assert sets["alpha158_jp_v1"]["column_count"] == 158
     assert sets["alpha360_jp_v1"]["column_count"] == 360
+    first = sets["alpha360_jp_v1"]["columns"][0]
+    assert set(first) == {"name", "expression", "required_fields", "window", "dtype"}
+    assert [column["name"] for column in sets["alpha360_jp_v1"]["columns"]] == [
+        feature.name for feature in get_feature_set("alpha360_jp_v1").features
+    ]
 
 
 def test_alpha360_is_offered_as_selectable_not_refused(client) -> None:

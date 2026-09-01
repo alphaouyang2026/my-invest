@@ -40,7 +40,7 @@ from app.models.research import (
 )
 from app.models.task import Task, TaskStatus
 from app.research.bundle_builder import QlibDataBundleBuilder
-from app.research.dataset import LABEL_COLUMN, build_dataset
+from app.research.dataset import build_dataset, missing_rate_drift
 from app.research.execution_spec import ExecutionDefinitionUnavailable, compile_execution_spec
 from app.research.lgbm import (
     CancellableLGBModel,
@@ -51,6 +51,7 @@ from app.research.lgbm import (
 from app.research.model_evaluation import (
     evaluate_segment,
     feature_importance_frame,
+    prediction_frame,
     score_frame,
     summarize_segment,
     training_curve_frame,
@@ -273,12 +274,10 @@ class ModelResearchWorkflow:
         return predictions, analysis
 
     def _evaluate(self, *, predictions, assembled, spec, universe_sizes, bundle_path, calendar, weekly):
-        labels = assembled.handler.fetch(col_set="label", data_key="raw").reset_index()
-        labels = labels.rename(
-            columns={"datetime": "observation_date", "instrument": "instrument_id", LABEL_COLUMN: "label"}
-        )
-        labels["observation_date"] = pd.to_datetime(labels["observation_date"]).dt.date
-        labels["instrument_id"] = labels["instrument_id"].astype(str)
+        # Keep invalid and not-yet-mature labels for prediction status. The
+        # evaluator filters `label.isna()` itself, so these rows remain visible
+        # without contaminating IC or group-return summaries.
+        labels = assembled.labels.copy()
 
         momentum = self._momentum_scores(bundle_path, spec, calendar, weekly, universe_sizes)
 
@@ -356,6 +355,27 @@ class ModelResearchWorkflow:
         warnings = [{"code": "free_data_limit", "detail": "J-Quants Free history limits inference"}]
         if test_summary["observations"] < 2:
             warnings.append({"code": "insufficient_test_observations", "count": test_summary["observations"]})
+        if spec.feature_set.maturity == "experimental":
+            warnings.append(
+                {
+                    "code": "experimental_feature_set",
+                    "detail": f"{spec.feature_set.name} uses short history; results are exploratory",
+                }
+            )
+        drift = missing_rate_drift(assembled.missing_rate)
+        if spec.feature_set.maturity == "experimental" and not drift.empty:
+            worst = drift.sort_values("drift", ascending=False).iloc[0]
+            warnings.append(
+                {
+                    "code": "high_test_missing_rate",
+                    "detail": (
+                        f"{len(drift)} feature(s) drifted by more than 10 percentage points; "
+                        f"worst={worst['feature_name']} ({worst['drift']:.1%})"
+                    ),
+                    "count": len(drift),
+                    "max_drift": float(worst["drift"]),
+                }
+            )
 
         importance = feature_importance_frame(booster, list(spec.feature_set.column_names))
         summary = {
@@ -366,14 +386,23 @@ class ModelResearchWorkflow:
             "feature_set": spec.feature_set.name,
         }
 
+        trained_model_id = uuid.uuid4()
+        published_scores = prediction_frame(
+            results["test_scores"],
+            results["labels"],
+            trained_model_id=trained_model_id,
+            data_snapshot_id=experiment.data_snapshot_id,
+        )
+
         publisher = ResearchArtifactPublisher(session, get_settings().research_artifact_dir)
         prepared = publisher.prepare(
             run,
             tables={
-                "predictions": results["test_scores"],
+                "predictions": published_scores,
                 "metrics": results["metrics"],
                 "feature_importance": importance,
                 "feature_missing_rate": assembled.missing_rate,
+                "feature_group_anomalies": assembled.feature_group_anomalies,
                 "training_curve": training_curve_frame(evals_result),
                 "labels": results["labels"],
                 "qlib_signal_analysis": results["qlib_signal_analysis"],
@@ -385,6 +414,7 @@ class ModelResearchWorkflow:
         )
         session.add(publisher.artifact_row(prepared))
         trained = TrainedModel(
+            id=trained_model_id,
             research_run_id=run.id,
             experiment_id=experiment.id,
             data_snapshot_id=experiment.data_snapshot_id,
@@ -412,7 +442,7 @@ class ModelResearchWorkflow:
         )
         session.add(trained)
         session.flush()
-        scores = results["test_scores"]
+        scores = published_scores
         session.add(
             PredictionRun(
                 research_run_id=run.id,

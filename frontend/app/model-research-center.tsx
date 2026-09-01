@@ -58,17 +58,23 @@ type ModelResults = {
   prediction_run: Record<string, unknown> | null
   feature_importance: { feature_name: string; gain: number; split: number; gain_rank: number }[]
   feature_missing_rate: { segment: string; feature_name: string; missing_rate: number }[]
+  feature_group_anomalies: { segment: string; feature_group: string; source_field: string; invalid_rows: number; rows: number }[]
   training_curve: { dataset: string; metric: string; iteration: number; value: number }[]
 }
 
 type RankedScores = {
   observation_date: string | null
   scores: {
+    observation_date: string
     instrument_id: string
+    source_code: string | null
     raw_score: number | null
     average_rank: number | null
     rank_percentile: number | null
     normalized_score: number | null
+    label_status: string
+    trained_model_id: string
+    data_snapshot_id: string
   }[]
 }
 
@@ -98,6 +104,7 @@ const MOMENTUM_SOURCE = 'momentum_6_1'
 //: showing. The full table is 158 or 360 rows and nobody reads it; the handful
 //: that drifted are the ones that indicate a data problem rather than a model.
 const MISSING_RATE_DRIFT = 0.1
+const SCORE_PAGE_SIZE = 50
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}/api/v1${path}`, init)
@@ -380,30 +387,93 @@ export default function ModelResearchCenter() {
       )}
 
       {latest?.status === 'succeeded' && ranked && (
-        <div className="ranked-scores">
-          <h3>RankedScores · 样本外全部截面</h3>
-          <p className="endpoint">
-            按 rank_percentile 排序，不做 top-N 截断——截断属于组合策略（08）的决定。
-            raw_score 是回归输出，既无收益量纲也无百分位含义。
-          </p>
-          <table className="findings">
-            <thead><tr><th>预测时点</th><th>证券身份</th><th>原始分数</th><th>平均秩</th><th>位次百分位</th></tr></thead>
-            <tbody>{[...ranked.scores]
-              .sort((a, b) => (b.rank_percentile ?? 0) - (a.rank_percentile ?? 0))
-              .slice(0, 100)
-              .map((row, index) => (
-                <tr key={`${row.instrument_id}-${index}`}>
-                  <td>{String((row as Record<string, unknown>).observation_date ?? '—').slice(0, 10)}</td>
-                  <td>{row.instrument_id}</td>
-                  <td>{metric(row.raw_score, 6)}</td>
-                  <td>{row.average_rank ?? '—'}</td>
-                  <td>{row.rank_percentile == null ? '—' : row.rank_percentile.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 1 })}</td>
-                </tr>
-              ))}</tbody>
-          </table>
-        </div>
+        <RankedScoresTable key={latest.id} ranked={ranked} />
       )}
     </section>
+  )
+}
+
+function RankedScoresTable({ ranked }: { ranked: RankedScores }) {
+  const dates = [...new Set(ranked.scores.map((row) => row.observation_date).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a))
+  const [selectedDate, setSelectedDate] = useState(ranked.observation_date ?? dates[0] ?? '')
+  const [view, setView] = useState<'20' | '50' | 'all'>('20')
+  const [page, setPage] = useState(1)
+
+  const datedScores = dates.length
+    ? ranked.scores.filter((row) => row.observation_date === selectedDate)
+    : ranked.scores
+  const sortedScores = [...datedScores].sort((a, b) => {
+    const rankDifference = (b.rank_percentile ?? -1) - (a.rank_percentile ?? -1)
+    return rankDifference || a.instrument_id.localeCompare(b.instrument_id)
+  })
+  const pageCount = Math.max(1, Math.ceil(sortedScores.length / SCORE_PAGE_SIZE))
+  const shownScores = view === 'all'
+    ? sortedScores.slice((page - 1) * SCORE_PAGE_SIZE, page * SCORE_PAGE_SIZE)
+    : sortedScores.slice(0, Number(view))
+
+  function chooseDate(value: string) {
+    setSelectedDate(value)
+    setPage(1)
+  }
+
+  function chooseView(value: '20' | '50' | 'all') {
+    setView(value)
+    setPage(1)
+  }
+
+  return (
+    <div className="ranked-scores">
+      <div className="ranked-heading">
+        <h3>RankedScores · {selectedDate || '样本外截面'}</h3>
+        <label>
+          预测日期
+          <select aria-label="预测日期" value={selectedDate} onChange={(event) => chooseDate(event.target.value)}>
+            {dates.map((date) => <option key={date} value={date}>{date}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="score-view-controls" role="group" aria-label="排名显示范围">
+        {(['20', '50', 'all'] as const).map((value) => (
+          <button
+            type="button"
+            className={view === value ? 'primary' : 'secondary'}
+            aria-pressed={view === value}
+            key={value}
+            onClick={() => chooseView(value)}
+          >
+            {value === 'all' ? '全部' : `Top ${value}`}
+          </button>
+        ))}
+      </div>
+      <p className="endpoint">
+        默认展示所选预测日的头部排名；这是界面视图，不会截断 API、研究产物或替代组合策略（08）。
+        位次百分位使用百分号显示，表示截面内相对位置，不是预期收益。
+      </p>
+      <table className="findings">
+        <thead><tr><th>证券代码</th><th>证券身份</th><th>原始分数</th><th>平均秩</th><th>位次百分位</th><th>标签状态</th></tr></thead>
+        <tbody>{shownScores.map((row) => (
+          <tr key={`${selectedDate}-${row.instrument_id}`}>
+            {/* Code first because it is the only column a person can read, but
+                instrument_id stays on the row: it is the identity 08 keys on,
+                and a ticker can be reassigned between dates. */}
+            <td>{row.source_code ?? '—'}</td>
+            <td className="instrument-id">{row.instrument_id}</td>
+            <td>{metric(row.raw_score, 6)}</td>
+            <td>{row.average_rank ?? '—'}</td>
+            <td>{row.rank_percentile == null ? '—' : row.rank_percentile.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 1 })}</td>
+            <td>{row.label_status}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      {view === 'all' && pageCount > 1 && (
+        <nav className="score-pagination" aria-label="排名分页">
+          <button type="button" className="secondary" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>上一页</button>
+          <span>第 {page} / {pageCount} 页 · 共 {sortedScores.length} 条</span>
+          <button type="button" className="secondary" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>下一页</button>
+        </nav>
+      )}
+    </div>
   )
 }
 

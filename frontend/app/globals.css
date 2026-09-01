@@ -57,6 +57,13 @@ main { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 72px 0; }
 .research-results, .ranked-scores { margin-top: 30px; overflow-x: auto; }
 .research-results h3, .ranked-scores h3 { margin-bottom: 10px; }
 .ranked-scores h4 { margin: 22px 0 10px; }
+.ranked-heading, .score-view-controls, .score-pagination { display: flex; align-items: center; gap: 10px; }
+.ranked-heading { justify-content: space-between; }
+.ranked-heading label { color: var(--muted); font-size: .75rem; }
+.ranked-heading select { margin-left: 8px; border: 1px solid var(--line); border-radius: 9px; background: #f7f7f3; padding: 8px 10px; color: var(--foreground); }
+.score-view-controls { margin-top: 14px; }
+.score-view-controls button, .score-pagination button { padding: 8px 12px; font-size: .78rem; }
+.score-pagination { justify-content: flex-end; margin-top: 14px; color: var(--muted); font-size: .78rem; }
 .bundle-list .secondary { padding: 8px 12px; }
 .section-heading, .run-title, .actions, .history-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .section-heading h2 { font-size: 1.7rem; margin-top: 5px; }
@@ -125,4 +132,14 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .research-form { grid-template-columns: 1fr 1fr; }
   .history-row { align-items: flex-start; flex-direction: column; }
+  .ranked-heading { align-items: flex-start; flex-direction: column; }
+}
+
+/* The stable identity stays on every ranked-scores row and stays complete: it
+   is what ticket 08 keys on and what a support question quotes, so it must be
+   copyable. De-emphasised rather than truncated, so the readable ticker is the
+   column the eye lands on. */
+.findings .instrument-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  opacity: 0.6;
 }

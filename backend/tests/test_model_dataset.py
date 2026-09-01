@@ -20,7 +20,7 @@ import pandas as pd
 import pytest
 
 from app.research.bundle import write_native_bundle
-from app.research.dataset import LABEL_COLUMN, build_dataset
+from app.research.dataset import LABEL_COLUMN, build_dataset, missing_rate_drift
 from app.research.execution_spec import compile_execution_spec
 from app.research.feature_sets import FeatureSet, _spec
 from app.research.model_definition import (
@@ -227,6 +227,55 @@ def test_missing_rates_are_reported_per_segment_and_column(bundle, market, spec)
     assert set(assembled.missing_rate["segment"]) == {"train", "valid", "test"}
     assert set(assembled.missing_rate["feature_name"]) == set(SMALL_SET.column_names)
     assert (assembled.missing_rate["missing_rate"] >= 0).all()
+
+
+def test_label_audit_keeps_the_unmatured_tail(bundle, market, spec) -> None:
+    sessions, weekly = market
+    assembled = build_dataset(
+        bundle_path=bundle,
+        spec=spec,
+        universe=_universe(weekly),
+        weekly_observations=weekly,
+        calendar=sessions,
+    )
+
+    tail = assembled.labels[assembled.labels["observation_date"] == weekly[-1]]
+    assert not tail.empty
+    assert set(tail["label_reason"]) == {"label_not_matured"}
+
+
+def test_current_close_and_volume_group_anomalies_are_counted(bundle, market, spec) -> None:
+    sessions, weekly = market
+    assembled = build_dataset(
+        bundle_path=bundle,
+        spec=spec,
+        universe=_universe(weekly),
+        weekly_observations=weekly,
+        calendar=sessions,
+    )
+
+    assert set(assembled.feature_group_anomalies["feature_group"]) == {
+        "price_lags",
+        "volume_lags",
+    }
+    assert set(assembled.feature_group_anomalies["segment"]) == {"train", "valid", "test"}
+    assert assembled.feature_group_anomalies["invalid_rows"].sum() == 0
+
+
+def test_missing_rate_drift_selects_only_columns_ten_points_worse_in_test() -> None:
+    rates = pd.DataFrame(
+        [
+            {"segment": "train", "feature_name": "stable", "missing_rate": 0.02},
+            {"segment": "test", "feature_name": "stable", "missing_rate": 0.03},
+            {"segment": "train", "feature_name": "drifted", "missing_rate": 0.03},
+            {"segment": "test", "feature_name": "drifted", "missing_rate": 0.40},
+        ]
+    )
+
+    drift = missing_rate_drift(rates)
+
+    assert list(drift["feature_name"]) == ["drifted"]
+    assert drift.iloc[0]["drift"] == pytest.approx(0.37)
 
 
 def test_the_handler_declares_the_train_segment_as_its_fit_window(bundle, market, spec) -> None:

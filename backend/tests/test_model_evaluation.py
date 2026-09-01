@@ -18,6 +18,7 @@ from app.research.model_evaluation import (
     evaluate_segment,
     feature_importance_frame,
     group_monotonicity,
+    prediction_frame,
     score_frame,
     summarize_segment,
     training_curve_frame,
@@ -70,6 +71,42 @@ def test_the_raw_score_is_left_untouched_by_ranking() -> None:
     sample = frame.iloc[0]
     assert sample["raw_score"] != sample["rank_percentile"]
     assert not frame["raw_score"].between(0, 1).all()
+
+
+def test_published_predictions_carry_label_state_and_provenance() -> None:
+    scores = score_frame(_predictions()).iloc[:2].copy()
+    labels = pd.DataFrame(
+        [
+            {
+                "observation_date": scores.iloc[0]["observation_date"],
+                "instrument_id": scores.iloc[0]["instrument_id"],
+                "label": 0.01,
+                "label_reason": None,
+            },
+            {
+                "observation_date": scores.iloc[1]["observation_date"],
+                "instrument_id": scores.iloc[1]["instrument_id"],
+                "label": None,
+                "label_reason": "label_not_matured",
+            },
+        ]
+    )
+
+    published = prediction_frame(
+        scores,
+        labels,
+        trained_model_id="model-1",
+        data_snapshot_id="snapshot-1",
+    )
+
+    assert list(published["label_status"]) == ["valid", "label_not_matured"]
+    assert set(published["trained_model_id"]) == {"model-1"}
+    assert set(published["data_snapshot_id"]) == {"snapshot-1"}
+    # The security code is not in the artifact: it is resolved from
+    # `instruments.source_code` when the scores are read, so the immutable file
+    # carries the identity and not a display label.
+    assert "symbol" not in published
+    assert "instrument_id" in published
 
 
 def test_an_informative_score_and_a_noise_score_go_through_one_code_path() -> None:
