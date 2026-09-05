@@ -40,3 +40,8 @@ frontend/lib/api/schema.d.ts
 
 # Rescued historical master responses (ticket 05 backfill archive)
 .master-backfill/
+
+# Baseline reference outputs from the direct Qlib+LightGBM CLI (~40 MB each).
+# Referenced by SHA256 in docs/experiments/, so reproducibility rests on the
+# recorded checksum rather than on keeping the payload in history.
+/result*.txt
