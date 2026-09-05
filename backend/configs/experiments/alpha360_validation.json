@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "11e402a7-27dc-4b36-8054-ba1f7bde2216",
+  "provider_root": "/app/var/qlib-cli-data",
+  "train_start": "2024-09-02",
+  "evaluation_start": "2026-02-17",
+  "evaluation_end": "2026-05-22",
+  "valid_days": 60,
+  "step": 20,
+  "min_train_days": 252,
+  "min_folds": 3,
+  "purge_horizon": 20,
+  "feature_sets": ["alpha360"],
+  "horizons": [5],
+  "train_windows": ["expanding"],
+  "stop_metrics": ["l2"],
+  "seed": 20260829,
+  "num_threads": 2,
+  "feature_batch_size": 64,
+  "qlib_kernels": 2,
+  "scan_batch_rows": 4096,
+  "cache_schema_version": 2,
+  "mode": "structure"
+}

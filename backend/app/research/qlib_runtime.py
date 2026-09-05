@@ -29,6 +29,7 @@ def read_features(
     fields: list[str],
     start: str,
     end: str,
+    kernels: int | None = None,
 ) -> pd.DataFrame:
     """The only application seam that initializes Qlib global provider state.
     """
@@ -37,13 +38,13 @@ def read_features(
     from qlib.data import D
 
     started = time.monotonic()
-    qlib.init(
-        provider_uri=str(bundle_path),
-        region=REG_CN,
-        expression_cache=None,
-        dataset_cache=None,
-        clear_mem_cache=True,
-    )
+    options = dict(provider_uri=str(bundle_path), region=REG_CN,
+                   expression_cache=None, dataset_cache=None, clear_mem_cache=True)
+    if kernels is not None:
+        if type(kernels) is not int or kernels < 1:
+            raise ValueError("kernels must be a positive integer")
+        options["kernels"] = kernels
+    qlib.init(**options)
     # Worth a line of its own: this is the one place global Qlib state is set
     # up, and "which bundle was it actually reading" is the first question a
     # surprising result raises.
