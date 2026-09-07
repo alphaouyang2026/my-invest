@@ -6,7 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from app.experiments.search_plan import write_json
+from app.experiments.artifact_cache import write_json
 
 GIB = 1024 ** 3
 

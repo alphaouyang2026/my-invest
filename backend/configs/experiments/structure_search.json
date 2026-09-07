@@ -9,15 +9,27 @@
   "min_train_days": 252,
   "min_folds": 3,
   "purge_horizon": 20,
-  "feature_sets": ["alpha158", "alpha360"],
-  "horizons": [5, 10, 20],
-  "train_windows": ["expanding", 252],
-  "stop_metrics": ["l2", "rank_ic"],
+  "feature_sets": [
+    "alpha158",
+    "alpha360"
+  ],
+  "horizons": [
+    5,
+    10,
+    20
+  ],
+  "train_windows": [
+    "expanding",
+    252
+  ],
+  "stop_metrics": [
+    "l2",
+    "rank_ic"
+  ],
   "seed": 20260829,
   "num_threads": 2,
   "feature_batch_size": 64,
   "qlib_kernels": 2,
   "scan_batch_rows": 4096,
-  "cache_schema_version": 2,
   "mode": "structure"
 }

@@ -10,7 +10,7 @@
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_experiment_search.py backend/tests/test_qlib_lightgbm_direct.py -q --basetemp=backend/.pytest-tmp-search-memory-final -p no:cacheprovider
 ```
 
-结果：29 passed。覆盖切分和标签成熟、确定性采样、两种真实 LightGBM 早停、串行/双 worker 一致性、缓存复用、失败重试、校验和、候选晋级、报告以及 UTF-16 基线文件读取。
+结果：58 passed（`test_experiment_search.py`、`test_qlib_lightgbm_direct.py`、`test_feature_shard_cache.py`、`test_booster_training.py`）。覆盖切分和标签成熟、确定性采样、两种真实 LightGBM 早停、缓存复用、失败重试、校验和、候选晋级、报告以及 UTF-16 基线文件读取。双 worker 一致性测试已随并发能力一并移除。
 
 ## 真实数据验证
 

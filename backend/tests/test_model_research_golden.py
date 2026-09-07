@@ -28,7 +28,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
@@ -50,7 +50,9 @@ from app.models.market_data import (
 )
 from app.models.research import (
     ArtifactPublicationStatus,
+    DataBundleBuildAttempt,
     PredictionRun,
+    QlibDataBundle,
     ResearchArtifactPublication,
     ResearchExperiment,
     ResearchExperimentKind,
@@ -578,6 +580,72 @@ def test_alpha360_publishes_a_missing_rate_row_for_every_column(golden, loaded, 
     assert missing["feature_name"].nunique() == len(get_feature_set("alpha360_jp_v1").features)
     assert set(group_anomalies["feature_group"]) == {"price_lags", "volume_lags"}
     assert set(group_anomalies["segment"]) == {"train", "valid", "test"}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("feature_set", ["alpha158", "alpha360"])
+def test_direct_rolling_chain_uses_the_real_snapshot_without_product_state(
+    golden, loaded, workspace, feature_set
+) -> None:
+    """Exercise the script service against continuous bars and production thresholds."""
+
+    from app.experiments.qlib_lightgbm_direct import (
+        DateRange,
+        DirectPredictionConfig,
+        build_day_provider,
+        run_direct_prediction,
+    )
+
+    session, snapshot = loaded
+    sessions = [date.fromisoformat(day) for day in golden["calendar"]]
+    provider_root = workspace["settings"].qlib_data_dir.parent / "direct-providers"
+    artifact_root = workspace["settings"].research_artifact_dir
+    product_models = (
+        QlibDataBundle,
+        DataBundleBuildAttempt,
+        Task,
+        ResearchExperiment,
+        ResearchRun,
+        TrainedModel,
+        PredictionRun,
+        ResearchArtifactPublication,
+    )
+
+    def row_counts() -> dict[type, int]:
+        return {
+            model: session.scalar(select(func.count()).select_from(model)) or 0
+            for model in product_models
+        }
+
+    before_rows = row_counts()
+    before_artifacts = sorted(
+        str(path.relative_to(artifact_root)) for path in artifact_root.rglob("*")
+    )
+
+    build_day_provider(session, snapshot.id, provider_root)
+    result = run_direct_prediction(
+        session,
+        DirectPredictionConfig(
+            snapshot_id=snapshot.id,
+            provider_root=provider_root,
+            feature_set=feature_set,
+            train=DateRange(sessions[60], sessions[159]),
+            valid=DateRange(sessions[166], sessions[209]),
+            test=DateRange(sessions[216], sessions[-1]),
+            rolling_step=20,
+            num_threads=1,
+        ),
+    )
+
+    assert result.summary["feature_set"] == feature_set
+    assert result.summary["fold_count"] == 3
+    assert result.summary["test_ic_dates"] > 0
+    assert result.predictions["datetime"].max() == sessions[-1]
+    assert result.predictions.groupby("fold")["datetime"].nunique().tolist() == [20, 20, 6]
+    assert row_counts() == before_rows
+    assert sorted(
+        str(path.relative_to(artifact_root)) for path in artifact_root.rglob("*")
+    ) == before_artifacts
 
 
 # --------------------------------------------------------------------------

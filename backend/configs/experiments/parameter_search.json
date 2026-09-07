@@ -7,7 +7,6 @@
   "feature_batch_size": 64,
   "qlib_kernels": 2,
   "scan_batch_rows": 4096,
-  "cache_schema_version": 2,
   "mode": "parameters",
   "candidates": "selected_structures.json",
   "trials_per_structure": 40,

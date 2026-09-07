@@ -140,9 +140,22 @@ docker compose exec backend uv run python scripts/qlib_lightgbm_direct.py predic
   --test 2026-01-05:2026-08-31 `
   --label-horizon 5 `
   --rolling-step 20
+
+# 4. 运行搜索导出的候选：整份配置来自文件，单个字段可用显式 flag 覆盖
+docker compose exec backend uv run python scripts/qlib_lightgbm_direct.py predict `
+  --config configs/experiments/selected_parameters-direct-run-<trial-id>.json `
+  --seed 20260830
 ```
 
 Compose 中 backend 的工作目录是 `/app`，`./backend` 挂载到 `/app`。数据库连接复用现有 `POSTGRES_*` 配置。容器内 provider root 默认 `/app/var/qlib-direct-providers`，由 `research_assets` named volume 持久化；三个子命令都可用 `--provider-root` 修改。`--feature-set` 只允许 `alpha158` 和 `alpha360`，默认 `alpha158`。`--label-horizon` 默认 `5`，`--rolling-step` 默认 `20`，两者单位都是 snapshot 日历中的交易日。
+
+`--model-params`、`--stop-metric` 与 `--train-window` 是搜索所优化的三个维度，因此必须能在这里执行；没有它们，搜索选出的候选只是一段无法运行的描述。`--model-params` 接受内联 JSON 或 `@path`，仍然只过 `OVERRIDABLE_PARAMS` 白名单，越界或写入 seed 一律拒绝而不夹取。`--stop-metric` 为 `l2`（默认）或 `rank_ic`。`--train-window` 为 `expanding`（默认）或一个固定交易日数，后者随 fold 滑动。
+
+`--purge-horizon` 默认等于 `--label-horizon`。只有在需要让多个 label horizon 落在同一批评价日上时才显式给出——实验搜索比较 5/10/20 日标签时按最长的统一 purge，否则三者的成绩不可比。它只能大于等于 `label_horizon`。
+
+`--config` 读取 `evaluate_qlib_candidates.py` 导出的 JSON，字段名与上述 flag 一致；显式 flag 优先于文件，未出现在两者中的字段才取默认值。文件出现未知字段时拒绝执行，而不是静默忽略。
+
+命令的 stdout 只承载一份 JSON 文档，`predict > result.json` 必须可解析。Qlib 在 import 时把缺失的可选后端打到 stdout，structlog 的默认 console renderer 也把每条日志打到 stdout，因此整个命令体在 stdout 指向 stderr 的状态下执行，只有最终结果写回真正的 stdout。诊断照常可见，但不进结果文件。
 
 三个命令都在前台同步执行。成功退出码为 `0`；参数、snapshot、provider 或数据错误为 `2`；预测训练错误为 `1`。
 
@@ -257,7 +270,7 @@ pool = build_stock_pool(
 
 `max_window` 来自现有可信 FeatureSet 注册表；Alpha360 的 60 根 bar 对应最大 lag 59。检查点至少包含最大 lag、20、5、1，而不是继续使用动量策略的 147/21 默认值。它们只验证关键端点，不承诺滚动窗口中每一天都有行情；中间缺失继续表现为 NaN。
 
-由此形成 `universe_by_date`。Qlib 计算出的特征和标签必须在进入 DatasetH 前按 `(date, instrument)` 过滤；不允许全市场训练后只在最终排名阶段过滤。
+由此形成 `universe_by_date`。Qlib 计算出的特征必须在写入分片缓存前按 `(date, instrument)` 过滤；不允许全市场训练后只在最终排名阶段过滤。标签是例外，见 9.2 第 5 条。
 
 继续沿用现有股票池的点时 roster、Prime 国内普通股、20 日平均成交额、历史价格和预测日可交易性规则。`PoolWarning` 进入结果 summary，不创建数据库记录。
 
@@ -273,7 +286,8 @@ pool = build_stock_pool(
 - 每个 segment 满足 `start <= end`，三者按 train → valid → test 严格递增且互不重叠；
 - `train`、`valid` 是首个 rolling fold 的请求窗口，`test` 是所有 rolling fold 要覆盖的总体预测范围；
 - 程序按下述 label purge 自动缩短每个 fold 的有效 train/valid 末端，并在 summary 返回真实区间；
-- test 尾部若没有完整的多日标签，仍作为 prediction-only 日期输出排名，但不进入 IC/Rank IC 评价。
+- test 尾部若没有完整的多日标签，仍作为 prediction-only 日期输出排名，但不进入 IC/Rank IC 评价；成熟边界以 `DataSnapshot.coverage_end` 的实际行情覆盖为准，不能使用可能延伸到未来的 calendar publication 末日；
+- 两个接缝的 purge 长度取 `purge_horizon`，默认等于 `label_horizon`；调用方显式给出更长值时按更长的 purge，这是多个 horizon 共享同一批评价日的唯一方式。
 
 以上任一条件不满足都返回 `DirectExperimentConfigError`，不进入 provider 特征读取、股票池构建或训练。
 
@@ -281,21 +295,26 @@ pool = build_stock_pool(
 
 1. 定位已有 day provider 并调用 `qlib.init(provider_uri=...)`；目录不存在立即失败。
 2. 将 CLI preset 映射到现有 `alpha158_jp_v1` 或 `alpha360_jp_v1` FeatureSet 注册项，使用其中展开的表达式、列名、最大窗口和 definition checksum。
-3. 用 `D.features` 读取特征以及生成标签所需的 `$close`。
+3. 按证券分批向 Qlib 读取特征以及生成标签所需的 `$close`，每批 `feature_batch_size` 只证券（默认 64），写成校验封存的分片缓存（见 9.4）。
 4. 标签为从下一开市日开始持有 `H` 个交易日的收盘收益，默认 `H=5`：`close(t+H+1) / close(t+1) - 1`，等价于 Qlib 表达式 `Ref($close, -(H+1)) / Ref($close, -1) - 1`。
-5. 按 `universe_by_date` 过滤特征与标签。
-6. 用 `StaticDataLoader → DataHandlerLP` 只处理一次全体特征，再为每个 rolling fold 建立独立 `DatasetH`。
+5. 按 `universe_by_date` 过滤特征。**标签不按股票池过滤**：前瞻收益必须能取到证券离开股票池之后的收盘价，否则每个边界附近的标签都被悄悄截断。
+6. 每个 fold 从缓存中流式装配自己的 train / valid / test 矩阵。
 
-processors 固定为：
+processors 固定为，且不再经由 Qlib 的 `DataHandlerLP` 施加，而是在缓存的三个明确位置各自实现：
 
 ```text
-输入 DataFrame：±inf -> NaN
-learn_processors：DropnaLabel、CSRankNorm(label)
+写分片时     ：特征 ±inf -> NaN                      （InfToNaN）
+合并标签时   ：(rank(pct) - 0.5) * 3.46 逐截面归一化 （CSRankNorm(label)）
+装载学习段时 ：丢弃标签为 NaN 的行                    （DropnaLabel）
 ```
 
-LightGBM 训练目标使用逐日截面 rank-normalized label，测试评价使用未归一化的原始多日收益。预测和标签始终按 `(datetime, instrument)` index 对齐。
+三者都是无状态的（不含任何 fit window），因此预先计算不引入泄漏。这份等价关系不是断言而是验收项：测试同时构造 `DataHandlerLP` 参照管线，要求两条路径产出的学习矩阵逐值相同。
 
-标签的信息退出日为 `t+H+1`。每个 fold 自动执行严格 purge，使下一 segment 的首个特征日不出现在上一 segment 的标签中：
+特征在缓存中以 `float32` 存储。这是为了让整段面板能一次性预分配，也使本入口与实验搜索在数值上完全一致。
+
+LightGBM 训练目标使用逐日截面 rank-normalized label，测试评价使用未归一化的原始多日收益。预测和标签始终按 `(datetime, instrument)` index 对齐。`label_not_mature` 的判断使用 snapshot 实际行情覆盖截止点：只有标签退出日不晚于 `DataSnapshot.coverage_end` 才算已经成熟；日历中存在更晚的开市日并不代表 snapshot 已经含有这些行情。
+
+标签的信息退出日为 `t+P+1`，其中 `P` 为 `purge_horizon`（默认等于 `H`）。每个 fold 自动执行严格 purge，使下一 segment 的首个特征日不出现在上一 segment 的标签中：
 
 ```text
 label_exit(effective_train.end) < valid.start
@@ -308,7 +327,7 @@ label_exit(effective_valid.end) < test.start
 
 `rolling_step=S` 将总体 test 按连续 `S` 个交易日切块，最后一块允许不足 `S` 日。第 `k` 个 fold：
 
-- train 起点固定，候选终点相对首个 fold 前移 `k*S` 个交易日，形成 expanding train；
+- train 候选终点相对首个 fold 前移 `k*S` 个交易日；`train_window=expanding` 时起点固定，形成 expanding train，固定交易日数时起点随之前移，每个 fold 训练长度相同；
 - valid 起止日期整体前移 `k*S` 个交易日，保持验证窗口长度；
 - test 为总体 test 中第 `k` 个连续块；
 - train/valid 候选末端再按 9.2 自动 purge；
@@ -316,13 +335,55 @@ label_exit(effective_valid.end) < test.start
 
 `rolling_step` 控制重训频率和单个模型负责的预测长度，不是 train_set 或 valid_set 的长度。
 
+固定 `train_window` 只允许滑动，不允许缩短：首个 fold 从 `train.start` 到其 purge 后的 train 末端不足 `train_window` 个交易日时返回 `DirectExperimentConfigError`，而不是让首个 fold 用比其余 fold 更短的历史训练。
+
+### 9.4 特征分片缓存
+
+整块面板从不在内存中出现。缓存目录由**数据身份**唯一决定：
+
+```text
+digest(cache schema 版本, DataSnapshot 身份, provider logical_checksum,
+       FeatureSet definition_checksum, label_horizon, 股票池 policy fingerprint,
+       日期跨度)
+```
+
+刻意**不含代码摘要**：否则任何一次提交都会作废一份内容并未改变的缓存。也不含 `feature_batch_size` / `qlib_kernels`：它们决定活怎么分，不决定缓存里存什么，半成品缓存由 `shard-plan.json` 一致性校验兜底。任一输入变化即换目录重建，不存在原地覆盖。
+
+**跨度足够，是因为股票池按整个跨度构建，而不是按 fold 恰好触及的日期。** 缓存内容按股票池过滤，而 `train_window` / `purge_horizon` / `rolling_step` 与 valid 窗口都只在跨度内部移动 fold。若改按 fold 派生的股票池过滤，这些参数就会进入缓存内容而不进入身份，后跑的运行将静默读到不完整的训练集——这正是本设计要排除的失效模式。封存前逐日核对**行数**：股票池说某日有 N 个成员，缓存该日就必须恰好有 N 行。只核对「日期是否出现」不够——特征与标签派生自同一份过滤结果，provider 只答了一批证券中的一部分时两者一起变短，逐行校验看不出异常，而 train / valid 段没有任何覆盖率门槛可以事后兜底。不一致即拒绝封存：写出一份已经短了的缓存，只会把失败推给下一个读它的人。
+
+运行所需的交易日集合是 `assemble_sharded_dataset` 的必填参数，缺任意一天即拒绝返回 reader——校验是拿到 reader 的前提，而不是拿到之后的一句约定，否则新增调用点漏调即可绕过。就当前实现而言这项检查恒为真（股票池按整跨度构建，fold 日期必为其子集），它的作用是把这条不变式写成可执行的断言：一旦有人把过滤改回 fold 派生，它会立刻失败。
+
+按**证券**而非按日期分片，因为前瞻标签沿每只证券自己的序列 `shift` 计算，按日期切会在每个边界处截断标签。
+
+目录结构与写入顺序：
+
+```text
+<cache_root>/<identity前20位>/
+    shard-plan.json          证券清单与分批，身份不符时拒绝复用
+    batch-0001/
+        features.parquet     该批证券、全时间跨度、已过滤股票池
+        raw-labels.parquet   该批证券的原始前瞻收益
+        complete.json        逐文件 checksum，封存后才算存在
+    ...
+    labels.parquet           合并后的窄标签表，含 raw_hH 与 learn_hH
+    complete.json
+```
+
+只有窄标签表被合并成单文件；特征始终散在分片中。装载一个 segment 时：按日期谓词下推读取窄标签、（学习段）丢弃 NaN 标签、稳定排序确定最终行序、一次性预分配 `float32` 矩阵，再用 pyarrow scanner 以 `scan_batch_rows` 行为单位流式扫过全部分片，按索引散射写入。每行必须恰好被写一次，否则报缺行或重复行。
+
+峰值内存因此是「该 segment 的最终矩阵 + 一个扫描批」，而不是整个实验的面板。
+
+`complete.json` 的语义是：目录要么完整要么不存在。身份不符是错误而非缓存未命中，checksum 不符同样是错误——断点续跑不看目录是否存在，只认逐字节校验。
+
 ## 10. LightGBM
 
 使用原生 `lightgbm.train`，避免 Qlib `LGBModel.fit` 对全局 Recorder/MLflow 的依赖。固定参数：
 
-| 参数 | 值 |
+下表是基线 `lgbm_jp_baseline_v1` 的默认值；`--model-params` 可以按 `OVERRIDABLE_PARAMS` 白名单逐项覆盖，`objective` 与两个 reproducibility 开关是锁定项，不可覆盖。
+
+| 参数 | 默认值 |
 |---|---|
-| objective / metric | `mse` / `l2` |
+| objective | `mse`（锁定） |
 | learning_rate | `0.05` |
 | num_leaves / max_depth | `31` / `6` |
 | min_data_in_leaf | `200` |
@@ -333,7 +394,9 @@ label_exit(effective_valid.end) < test.start
 | early_stopping_rounds | `50` |
 | reproducibility | deterministic、force_row_wise、四个 seed 相同 |
 
-每个 fold 中 train 是唯一建树数据，valid 只用于 early stopping，test 只在训练完成后用于预测和评价。CLI 不开放任意模型参数。
+每个 fold 中 train 是唯一建树数据，valid 只用于 early stopping，test 只在训练完成后用于预测和评价。
+
+训练本身由 `app/experiments/booster_training.py` 的 `train_booster` 承担，逐 fold 的「训练 → 预测 → 常数模型检查 → 日度评价 → 特征重要性」由本模块的 `run_fold` 承担。实验搜索不再持有这两者的副本：它把一个 trial 编译成 `DirectPredictionConfig` 后调用 `run_direct_prediction`，因此搜索排名所依据的模型和 predict 实际运行的模型必然是同一段代码，否则"搜索出的最佳参数"只是关于搜索自身的结论。早停指标由 `stop_metric` 选择，通过 `feval` 同时记录 `l2` 与 `rank_ic`，只有第一项参与早停（`first_metric_only`）。`stop_metric=l2` 与 LightGBM 内建 `l2` 早停选出同一轮、预测逐位相同，`model.txt` 仅 `[metric: ...]` 一行不同。
 
 ### 10.1 IC/Rank IC 有效性
 
@@ -353,7 +416,7 @@ label_exit(effective_valid.end) < test.start
 1. 读取并校验 `DataSnapshot`。
 2. 计算确定性的最终目录；已存在时调用 `open_day_provider`，完全通过身份、结构和 smoke read 后才返回 `created=false`，失败时不覆盖。
 3. 从 PostgreSQL/DataSnapshot 同步导出到随机临时目录。
-4. 用真实 Qlib 对临时目录执行 `$close/$factor/$vwap` smoke read。
+4. 用真实 Qlib 对临时目录执行 `$close/$factor/$vwap` smoke read；按有界 instrument 批次向后检查，直到找到有限 `$close`，避免排序靠前但全期不可交易的证券误判整个 provider，不存在任何有限 `$close` 时失败。
 5. 写 manifest，并用原子 rename 生成最终目录。
 6. 对 rename 后的最终目录调用 `open_day_provider`，通过后输出 provider path、manifest 和 `created=true`；不启动预测。
 
@@ -376,8 +439,8 @@ label_exit(effective_valid.end) < test.start
 2. 调用 `open_day_provider` 打开已有 day provider；缺失时返回 `provider_not_found`，不自动调用 build。
 3. 生成 rolling folds 并按多日标签自动 purge；对所有 fold 的 train / valid / test 日期调用 `build_stock_pool`，形成去重后的 `universe_by_date`。
 4. 初始化 Qlib day provider，读取 Alpha158 或 Alpha360 和 `$close`。
-5. 生成默认5日标签，按每日股票池过滤，建立共享 DataHandlerLP。
-6. 对每个 fold 建立 DatasetH，准备该 fold 的完整 train_set / valid_set，执行一次 LightGBM early-stopping 训练并预测该 fold 的 test chunk。
+5. 生成默认5日标签，按每日股票池过滤特征，写入或复用 9.4 的分片缓存。
+6. 对每个 fold 从缓存装载 train / valid / test 三个矩阵，调用 `run_fold` 执行一次 LightGBM early-stopping 训练并预测该 fold 的 test chunk。
 7. 拼接互不重叠的 fold 预测，按 10.1 复用现有 `evaluate_cross_section` / `summarize_ic` 计算逐日 IC、Rank IC 与汇总。
 8. 返回 summary、逐 fold 完整 prediction、逐 fold feature importance；CLI 直接显示，不 publish。
 
@@ -433,7 +496,7 @@ label_exit(effective_valid.end) < test.start
 - `DirectExperimentDataError`：日历历史不足、某日股票池或 segment 为空、有效截面不足；
 - `DirectExperimentTrainingError`：LightGBM 失败、模型为空或预测非有限。
 
-三个命令不提供跨进程锁，也不支持对同一 snapshot 并发执行 build/delete/predict。调用者负责串行执行。build 的临时目录使用随机后缀，失败时仅清理本进程自己的临时目录；若另一个 build 已先生成最终目录，本进程验证其身份后返回。
+build 与 delete 不提供跨进程锁，也不支持对同一 snapshot 并发执行 build/delete/predict。predict 在装配特征缓存期间对缓存目录持有排他锁，同一数据身份的第二个 predict 会**立即以 `FileExistsError` 失败而不是等待**；训练与预测阶段不再持锁。进程被强杀（例如 OOM）会遗留 `.running.lock`，需人工删除后才能继续。调用者负责串行执行。build 的临时目录使用随机后缀，失败时仅清理本进程自己的临时目录；若另一个 build 已先生成最终目录，本进程验证其身份后返回。
 
 常数模型不得作为成功结果：预测整体零方差、所有树都是单叶或总 gain 为零时返回 training error。
 
@@ -460,11 +523,22 @@ label_exit(effective_valid.end) < test.start
 - 每个预测日调用 `build_stock_pool`，非成员行不能进入训练或排名；
 - 两个 segment 接缝都满足 `label_exit < next_segment.feature_cutoff`，非法日期在训练前失败；
 - test 特征/标签不能影响训练 matrix；
+- application service 的完整编排只读取 session，逐 fold 重新调用训练并拼接连续且无重复的预测；
+- 分片缓存与 `DataHandlerLP` + `InfToNaN`/`DropnaLabel`/`CSRankNorm` 参照管线产出的学习矩阵在 `rtol=1e-6` 内一致（特征以 float32 存储，参照管线为 float64），标签在 `rtol=1e-9` 内一致；
+- 相同数据身份的第二次装配不再调用 Qlib；分片计划在同一身份下改变时拒绝复用；装载 segment 时缺行、重复行或标签外的多余行一律报错；
+- 任一交易日的缓存行数与股票池声明的成员数不一致时拒绝封存（整日缺失与部分缺失同等对待）；运行所需交易日不在缓存内时，在得到 reader 之前失败；损坏或身份不符的缓存——无论在根目录还是某个分片——都以数据错误退出（2），不是未捕获异常；
+- 导出的候选 JSON 中容器路径保持 POSIX 形式；配置新增渲染器无规则的字段类型时导出失败，不静默串化；
+- `FeatureCacheSpec` 的字段集合恰为「跨度、label_horizon、三个分批旋钮」：fold 几何（`train_window` / `purge_horizon` / `rolling_step` / valid 窗口）不改变缓存身份，也不得改变缓存内容；分批旋钮改变身份则视为回归；
+- 股票池过滤不截断前瞻标签：仅一天在池中的证券，其标签仍由池外未来收盘价算出；
+- `purge_horizon` 大于 `label_horizon` 时按前者 purge，实验搜索因此可对多个 horizon 使用同一批评价日；
+- 搜索侧不含任何训练代码：`search_runner` 源码中不出现 LightGBM、训练 seam、特征读取或 segment 装载，一个 trial 只被编译成 `DirectPredictionConfig` 后交给 `run_direct_prediction`；
+- 越界或写入 seed 的 `--model-params` 在任何训练前失败；固定 `train_window` 逐 fold 滑动且长度恒定，长于首个 fold 可用历史时拒绝；
+- `evaluate_qlib_candidates.py` 导出的候选 JSON 由 `direct_config` 渲染而非二次编译，能被 `predict --config` 原样消费，显式 flag 覆盖文件字段；train_window 长于计划首个 fold 实际训练天数时拒绝导出；
 - prediction/label 按 MultiIndex 对齐；
 - 每日输出 pool size、有效 score/label 数量、配对数和 coverage；只有两类 coverage 均至少 0.90 且有效 score 数、有效 label 数各自至少 100 的日期具备评价资格；没有可汇总 IC 日期时失败；
 - 运行前后数据库相关表行数不变，artifact 目录不变。
 
-slow test 使用真实连续 DataSnapshot 分别跑 Alpha158 完整链路和 Alpha360 smoke，断言模型、预测、IC/Rank IC 以及最后一期 Top 10 均产生。
+slow test 使用真实连续 DataSnapshot 分别跑 Alpha158 和 Alpha360 direct rolling 链路，断言三个 fold、预测、IC/Rank IC 和 prediction-only 尾日均产生；同时比较运行前后的 bundle/build attempt、Task、ResearchRun、模型、PredictionRun、publication 表行数和 artifact 目录，证明直接入口没有写入产品状态。
 
 Docker 验收使用第 4 节的脚本命令，只要求 `backend` service 能连接 PostgreSQL；不要求启动 worker 或 frontend，也不调用 backend API。默认 provider 在 `research_assets:/app/var` 中跨容器重建保持存在。
 
@@ -473,7 +547,7 @@ Docker 验收使用第 4 节的脚本命令，只要求 `backend` service 能连
 1. 从现有 builder 提取无状态 `export_snapshot_day_provider`，用原测试证明 07 输出未变。
 2. 实现共享的 `open_day_provider`，再实现独立的 `build_day_provider` 和 `delete_day_provider`。
 3. 实现 snapshot/date 契约，以及只消费已有目录的 `run_direct_prediction`。
-4. 接入逐预测日动态股票池、Alpha158/Alpha360、DatasetH、LightGBM 和带有效性门槛的评价。
+4. 接入逐预测日动态股票池、Alpha158/Alpha360、分片缓存、LightGBM 和带有效性门槛的评价。
 5. 增加 `backend/scripts/qlib_lightgbm_direct.py` 薄入口及三个 CLI subcommand，并用第 4 节 Docker 命令在真实 J-Quants DataSnapshot 上验收。
 
 ## 16. 明确非目标

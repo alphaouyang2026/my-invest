@@ -1,0 +1,10 @@
+{
+  "source": "docs/experiments/handover-2026-09-05/replicate-report.json",
+  "trial_id": "0b61155b01509d06732e",
+  "note": "Development-period figures. These 44 dates took part in selecting this candidate; not a blind test.",
+  "rank_ic_mean_by_seed": {
+    "20260829": 0.14145360678522736,
+    "20260830": 0.14919708627265396,
+    "20260831": 0.1490000464877255
+  }
+}

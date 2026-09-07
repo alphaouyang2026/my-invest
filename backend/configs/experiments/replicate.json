@@ -7,8 +7,11 @@
   "feature_batch_size": 64,
   "qlib_kernels": 2,
   "scan_batch_rows": 4096,
-  "cache_schema_version": 2,
   "mode": "replicate",
   "candidates": "selected_parameters.json",
-  "seeds": [20260829, 20260830, 20260831]
+  "seeds": [
+    20260829,
+    20260830,
+    20260831
+  ]
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,18 +82,24 @@ def _validate_provider(path: Path, snapshot_id: uuid.UUID) -> DayProviderRef:
         raise DayProviderError(
             f"Provider lacks smoke fields {sorted(required_fields - available_fields)}"
         )
-    instrument, active_start, active_end = _first_instrument(path / "instruments" / "all.txt")
-    try:
-        smoke = read_features(
-            path,
-            instruments=[instrument],
-            fields=["$close", "$factor", "$vwap"],
-            start=active_start,
-            end=active_end,
-        )
-    except Exception as exc:
-        raise DayProviderError(f"Qlib provider smoke read failed: {exc}") from exc
-    if smoke.empty or "$close" not in smoke or not smoke["$close"].notna().any():
+    found_finite_close = False
+    for instruments, active_start, active_end in _instrument_batches(
+        path / "instruments" / "all.txt"
+    ):
+        try:
+            smoke = read_features(
+                path,
+                instruments=instruments,
+                fields=["$close", "$factor", "$vwap"],
+                start=active_start,
+                end=active_end,
+            )
+        except Exception as exc:
+            raise DayProviderError(f"Qlib provider smoke read failed: {exc}") from exc
+        if not smoke.empty and "$close" in smoke and smoke["$close"].notna().any():
+            found_finite_close = True
+            break
+    if not found_finite_close:
         raise DayProviderError("Qlib provider smoke read returned no finite close")
     return DayProviderRef(path=path, manifest=manifest)
 
@@ -164,10 +171,26 @@ def delete_day_provider(snapshot_id: uuid.UUID, provider_root: Path) -> bool:
     return True
 
 
-def _first_instrument(path: Path) -> tuple[str, str, str]:
+def _instrument_batches(
+    path: Path,
+    *,
+    batch_size: int = 64,
+) -> Iterator[tuple[list[str], str, str]]:
+    """Yield bounded smoke-read samples until a usable research price is found."""
+
     try:
-        first = next(line for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
-        instrument, start, end = first.split("\t")
-    except (OSError, StopIteration, ValueError) as exc:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if not lines:
+            raise ValueError("file is empty")
+        records = [line.split("\t") for line in lines]
+        if any(len(record) != 3 for record in records):
+            raise ValueError("each line must have instrument, start and end")
+    except (OSError, ValueError) as exc:
         raise DayProviderError(f"Invalid Qlib instruments file {path}: {exc}") from exc
-    return instrument, start, end
+    for offset in range(0, len(records), batch_size):
+        batch = records[offset : offset + batch_size]
+        yield (
+            [record[0] for record in batch],
+            min(record[1] for record in batch),
+            max(record[2] for record in batch),
+        )

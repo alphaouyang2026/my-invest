@@ -12,6 +12,10 @@ _Avoid_: Qlib 数据集、最新数据
 由一个 DataSnapshot、导出器版本和 pyqlib 版本确定性生成、供 Qlib 读取且可删除重建的数据集合。
 _Avoid_: Qlib 缓存、数据源、Qlib 主库
 
+**FeatureShardCache（特征分片缓存）**:
+由一个 DataSnapshot、它所生成的 QlibDataBundle、FeatureSet 定义、标签周期、股票池策略和日期跨度确定性生成的派生特征存储；按证券分片、逐文件校验和封存，可随时删除重建，且不是任何事实的来源。与 QlibDataBundle 的区别在于内容：后者存行情事实，它存由行情算出的特征与标签。
+_Avoid_: 数据源、Qlib 缓存、特征仓库
+
 **DataBundleBuildAttempt（数据包构建尝试）**:
 构建一个 QlibDataBundle 的单次执行记录；失败或重试不会改变已经结束的构建尝试。
 _Avoid_: QlibDataBundle、ResearchRun

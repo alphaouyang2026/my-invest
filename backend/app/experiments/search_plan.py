@@ -1,73 +1,13 @@
 """Pure, deterministic planning and auditable filesystem artifacts for searches."""
 from __future__ import annotations
 
-import hashlib
 import itertools
-import json
 import math
-import os
 import random
-from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
-
-def digest(value) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str,
-                                     allow_nan=False).encode()).hexdigest()
-
-
-def file_digest(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def write_json(path: Path, value) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, default=str,
-                                    allow_nan=False), encoding="utf-8")
-    os.replace(temporary, path)
-
-
-def read_json(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-@contextmanager
-def exclusive_lock(root: Path):
-    root.mkdir(parents=True, exist_ok=True)
-    lock = root / ".running.lock"
-    fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    try:
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
-        yield
-    finally:
-        lock.unlink()
-
-
-def seal(root: Path, identity: str) -> None:
-    files = {str(p.relative_to(root)): file_digest(p) for p in sorted(root.rglob("*"))
-             if p.is_file() and p.name not in {"complete.json", ".running.lock"} and not p.name.endswith(".tmp")}
-    write_json(root / "complete.json", {"identity": identity, "files": files})
-
-
-def verified(root: Path, identity: str) -> bool:
-    marker = root / "complete.json"
-    if not marker.exists():
-        return False
-    value = read_json(marker)
-    if value["identity"] != identity:
-        raise ValueError(f"Artifact identity mismatch: {root}")
-    for name, checksum in value["files"].items():
-        path = (root / name).resolve()
-        if not path.is_relative_to(root.resolve()) or not path.is_file() or file_digest(path) != checksum:
-            raise ValueError(f"Artifact checksum mismatch: {name}")
-    return True
+from app.experiments.artifact_cache import digest, read_json
 
 
 def load_config(path: Path) -> dict:
@@ -77,7 +17,7 @@ def load_config(path: Path) -> dict:
                "purge_horizon", "feature_sets", "horizons", "train_windows", "stop_metrics",
                "seed", "search_seed", "num_threads", "model_params", "mode", "candidates",
                "trials_per_structure", "seeds", "feature_batch_size", "qlib_kernels",
-               "scan_batch_rows", "cache_schema_version"}
+               "scan_batch_rows"}
     unknown = set(config) - allowed
     if unknown:
         raise ValueError(f"Unknown config fields: {sorted(unknown)}")
@@ -90,12 +30,11 @@ def load_config(path: Path) -> dict:
                     stop_metrics=["l2", "rank_ic"], seed=20260829, search_seed=42,
                     num_threads=2, model_params={}, mode="structure",
                     trials_per_structure=40, seeds=[20260829, 20260830, 20260831],
-                    feature_batch_size=64, qlib_kernels=2, scan_batch_rows=4096,
-                    cache_schema_version=2)
+                    feature_batch_size=64, qlib_kernels=2, scan_batch_rows=4096)
     config = defaults | config
     for key in ("valid_days", "step", "min_train_days", "min_folds", "purge_horizon",
                 "num_threads", "trials_per_structure", "feature_batch_size", "qlib_kernels",
-                "scan_batch_rows", "cache_schema_version"):
+                "scan_batch_rows"):
         if type(config[key]) is not int or config[key] < 1:
             raise ValueError(f"{key} must be a positive integer")
     if config["mode"] not in ("structure", "parameters", "replicate"):

@@ -1,4 +1,15 @@
-"""Replay the original direct experiment and compare its captured result, without publishing."""
+"""Replay the original direct experiment and compare its captured result, without publishing.
+
+A reference captured before 2026-09-07 will not match, and the mismatch is real
+rather than a tolerance problem. The direct run assembled its panel through
+`DataHandlerLP` in float64 and reported only four fields per fold; it now streams
+float32 shards and reports the early-stopping diagnostics alongside them. Both
+`prediction_scores` and `folds` therefore differ by construction.
+
+The comparison is deliberately not loosened to absorb that. Re-freeze the
+reference from a current run and note which implementation produced it, so that a
+later mismatch still means what this script says it means.
+"""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +21,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.experiments.search_plan import digest, exclusive_lock, file_digest, read_json, seal, verified, write_json
+from app.experiments.artifact_cache import (
+    digest, exclusive_lock, file_digest, read_json, seal, verified, write_json,
+)
 
 
 def read_reference(path: Path):

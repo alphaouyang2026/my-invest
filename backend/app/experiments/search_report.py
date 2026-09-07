@@ -1,11 +1,13 @@
 """Read verified artifacts; report uncertainty without calling development a blind test."""
 from __future__ import annotations
 
+import dataclasses
+import uuid
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.experiments.search_plan import digest, read_json, write_json
+from app.experiments.artifact_cache import digest, read_json, write_json
 from app.experiments.search_runner import successful
 
 
@@ -83,6 +85,53 @@ def report(root: Path) -> dict:
     return result
 
 
+def direct_run_config(root: Path, trial: dict) -> dict:
+    """The same compilation `run_trial` performs, rendered as the CLI's `--config`.
+
+    A candidate a search reports but a run cannot execute is not an answer, and a
+    candidate a run executes differently from how it was measured is worse than
+    none. So this renders `direct_config` rather than recompiling the trial.
+    """
+    from app.experiments.search_runner import direct_config
+
+    config = read_json(root / "manifest.json")["config"]
+    plan = read_json(root / "fold_plan.json")
+    window = trial["train_window"]
+    available = plan["folds"][0]["train_days"]
+    if window != "expanding" and window > available:
+        # `fold_plan` reserves max(min_train_days, *fixed windows), so comparing
+        # against min_train_days alone refused candidates that had in fact run.
+        raise ValueError(
+            f"Trial {trial['trial_id']} wants a {window}-day train window but the plan's "
+            f"first fold holds {available} days"
+        )
+    return _render_run_config(direct_config(config, plan, trial))
+
+
+def _render_run_config(resolved) -> dict:
+    """One field per configuration field, converted only where JSON needs it."""
+    from app.experiments.qlib_lightgbm_direct import DateRange
+
+    rendered = {}
+    for field in dataclasses.fields(resolved):
+        value = getattr(resolved, field.name)
+        if isinstance(value, DateRange):
+            rendered[field.name] = f"{value.start}:{value.end}"
+        elif isinstance(value, Path):
+            # `str` on Windows turns the container's "/app/var/..." into
+            # backslashes, and the exported file is read inside the container.
+            rendered[field.name] = value.as_posix()
+        elif isinstance(value, uuid.UUID):
+            rendered[field.name] = str(value)
+        elif value is None or isinstance(value, (bool, int, float, str, dict)):
+            rendered[field.name] = value
+        else:
+            raise ValueError(
+                f"No rendering rule for {field.name!r} of type {type(value).__name__}"
+            )
+    return rendered
+
+
 def select_candidates(root: Path, ids: list[str], destination: Path):
     status = report(root)
     if status["incomplete"]:
@@ -96,8 +145,14 @@ def select_candidates(root: Path, ids: list[str], destination: Path):
         target = successful(root, trials[identity])
         if not read_json(target / "metrics.json")["eligible"]:
             raise ValueError("Cannot select a candidate with missing evaluation dates")
+    runs = {}
+    for identity in ids:
+        name = f"{destination.stem}-direct-run-{identity}.json"
+        write_json(destination.parent / name, direct_run_config(root, trials[identity]))
+        runs[identity] = name
     write_json(destination, dict(source_root=str(root.resolve()),
-                                experiment_id=status["experiment_id"], trial_ids=ids))
+                                experiment_id=status["experiment_id"], trial_ids=ids,
+                                direct_run_configs=runs))
 
 
 def load_candidates(path: Path):

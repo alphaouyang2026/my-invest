@@ -4,7 +4,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from app.experiments.search_plan import load_config, read_json
+from app.experiments.artifact_cache import read_json
+from app.experiments.search_plan import load_config
 
 
 def main(action: str, argv=None) -> int:
@@ -15,8 +16,9 @@ def main(action: str, argv=None) -> int:
         parser.add_argument("--dry-run", action="store_true", help="Plan only; no feature calculation or training")
         parser.add_argument("--max-trials", type=int)
         parser.add_argument("--resume", action="store_true")
-        parser.add_argument("--workers", type=int, choices=[1,2], default=1,
-                            help="Bounded concurrent boosters; Qlib data preparation stays serial")
+        parser.add_argument("--workers", type=int, choices=[1], default=1,
+                            help="Serial only: each trial loads its own segments from the "
+                                 "shared feature cache, so two at once double the peak")
     else:
         parser.add_argument("--experiment", type=Path, required=True)
         if action == "evaluate":

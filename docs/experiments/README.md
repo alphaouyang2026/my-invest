@@ -49,7 +49,7 @@ label 是 `close[t+h+1] / close[t+1] - 1`，h 为交易日跨度。严格要求�
 
 `--max-trials` 限制本次新尝试数；`--resume` 跳过已完成且 checksum 正确的项。失败/中断重跑创建新 attempt，不删除旧记录。强制中断可能留下 `.running.lock`，先确认原进程已退出，再由操作者移除此单个锁文件；脚本不会自动抢占锁。
 
-当前分片缓存 schema 强制 `--workers 1`；Qlib 特征按股票池证券并集每 64 只一批计算，默认使用 2 个 Qlib 进程。训练按 Fold 只组装所需矩阵，train/valid 与 evaluation 分开驻留。完成 Alpha360 资源验收前，`--workers 2` 会被明确拒绝。缓存使用 Parquet/JSON，不反序列化 pickle；代码、依赖或缓存 schema 变化会触发新身份，不复用旧实验缓存。cache 是重建数据而非事实来源。
+训练串行执行，`--workers 2` 被拒绝：每个 trial 通过 direct 入口装载自己的 segment，并行会同时抬高峰值内存并争抢同一份缓存的写锁。Qlib 特征按股票池证券并集每 64 只一批计算，默认使用 2 个 Qlib 进程。训练按 Fold 只组装所需矩阵，train/valid 与 evaluation 分开驻留。缓存使用 Parquet/JSON，不反序列化 pickle；缓存身份只由数据决定（snapshot、provider checksum、特征集定义、label horizon、股票池 policy、日期跨度），因此同一数据上的各阶段共用一份，改代码不会作废它。cache 是重建数据而非事实来源。
 
 在约 7.65 GiB 的当前容器环境执行 Alpha360 验收时，用外部监控器包装一条单-trial 命令：
 
