@@ -1,0 +1,3947 @@
+{
+  "daily_ic": [
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.06327132135629654,
+      "group_return_2": -0.07391010969877243,
+      "group_return_3": -0.047957200556993484,
+      "group_return_4": -0.052688103169202805,
+      "group_return_5": -0.03241288289427757,
+      "ic": 0.08131596067111192,
+      "ic_eligible": true,
+      "label_coverage": 0.9974126778783958,
+      "long_short_return": 0.030858438462018967,
+      "observation_date": "2026-02-17",
+      "paired_count": 771,
+      "pool_size": 773,
+      "rank_ic": 0.08953887283472502,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 773,
+      "valid_label_count": 771
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.0973672941327095,
+      "group_return_2": -0.12524253129959106,
+      "group_return_3": -0.0987597182393074,
+      "group_return_4": -0.06326881051063538,
+      "group_return_5": -0.0826617181301117,
+      "ic": 0.12817658614583852,
+      "ic_eligible": true,
+      "label_coverage": 0.9974358974358974,
+      "long_short_return": 0.014705576002597809,
+      "observation_date": "2026-02-18",
+      "paired_count": 778,
+      "pool_size": 780,
+      "rank_ic": 0.22649026506072048,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 780,
+      "valid_label_count": 778
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.07216975092887878,
+      "group_return_2": null,
+      "group_return_3": -0.08946552872657776,
+      "group_return_4": -0.033889684826135635,
+      "group_return_5": -0.05165513977408409,
+      "ic": 0.1740543782032076,
+      "ic_eligible": true,
+      "label_coverage": 0.9974554707379135,
+      "long_short_return": 0.020514611154794693,
+      "observation_date": "2026-02-19",
+      "paired_count": 784,
+      "pool_size": 786,
+      "rank_ic": 0.24065233877734218,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 786,
+      "valid_label_count": 784
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.06101307272911072,
+      "group_return_2": -0.050367485731840134,
+      "group_return_3": -0.06901096552610397,
+      "group_return_4": -0.023249823600053787,
+      "group_return_5": -0.03125472366809845,
+      "ic": 0.17557116025554073,
+      "ic_eligible": true,
+      "label_coverage": 0.9974874371859297,
+      "long_short_return": 0.029758349061012268,
+      "observation_date": "2026-02-20",
+      "paired_count": 794,
+      "pool_size": 796,
+      "rank_ic": 0.22252249387928236,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 796,
+      "valid_label_count": 794
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.05571066215634346,
+      "group_return_2": -0.06854107975959778,
+      "group_return_3": -0.07972248643636703,
+      "group_return_4": -0.02685185708105564,
+      "group_return_5": -0.04825061932206154,
+      "ic": 0.07130228764350219,
+      "ic_eligible": true,
+      "label_coverage": 0.9974937343358395,
+      "long_short_return": 0.007460042834281921,
+      "observation_date": "2026-02-24",
+      "paired_count": 796,
+      "pool_size": 798,
+      "rank_ic": 0.18072819521503455,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 798,
+      "valid_label_count": 796
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.07096578180789948,
+      "group_return_2": -0.057171810418367386,
+      "group_return_3": -0.08534186333417892,
+      "group_return_4": -0.03467510640621185,
+      "group_return_5": -0.041140906512737274,
+      "ic": 0.095804480900619,
+      "ic_eligible": true,
+      "label_coverage": 0.9975216852540273,
+      "long_short_return": 0.0298248752951622,
+      "observation_date": "2026-02-25",
+      "paired_count": 805,
+      "pool_size": 807,
+      "rank_ic": 0.18446060607633685,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 807,
+      "valid_label_count": 805
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.12365425378084183,
+      "group_return_2": -0.1372978538274765,
+      "group_return_3": -0.11937183886766434,
+      "group_return_4": -0.07083144038915634,
+      "group_return_5": -0.08234761655330658,
+      "ic": 0.12647611691845093,
+      "ic_eligible": true,
+      "label_coverage": 0.9938347718865598,
+      "long_short_return": 0.04130663722753525,
+      "observation_date": "2026-02-26",
+      "paired_count": 806,
+      "pool_size": 811,
+      "rank_ic": 0.2537223352291779,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 811,
+      "valid_label_count": 806
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.1137591153383255,
+      "group_return_2": -0.11909105628728867,
+      "group_return_3": -0.13030758500099182,
+      "group_return_4": -0.054034482687711716,
+      "group_return_5": -0.07807263731956482,
+      "ic": 0.17738464964938958,
+      "ic_eligible": true,
+      "label_coverage": 0.9927623642943305,
+      "long_short_return": 0.03568647801876068,
+      "observation_date": "2026-02-27",
+      "paired_count": 823,
+      "pool_size": 829,
+      "rank_ic": 0.2534823180743786,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 829,
+      "valid_label_count": 823
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.04017383232712746,
+      "group_return_2": -0.05903007090091705,
+      "group_return_3": -0.010325376875698566,
+      "group_return_4": 0.0019017303129658103,
+      "group_return_5": -0.015591077506542206,
+      "ic": 0.1453385655954283,
+      "ic_eligible": true,
+      "label_coverage": 0.9927797833935018,
+      "long_short_return": 0.02458275482058525,
+      "observation_date": "2026-03-02",
+      "paired_count": 825,
+      "pool_size": 831,
+      "rank_ic": 0.22348756951775914,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 831,
+      "valid_label_count": 825
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.03222036361694336,
+      "group_return_2": -0.001970207318663597,
+      "group_return_3": -0.0018987186485901475,
+      "group_return_4": -0.006119519472122192,
+      "group_return_5": 0.009806067682802677,
+      "ic": 0.08618157045562384,
+      "ic_eligible": true,
+      "label_coverage": 0.9940191387559809,
+      "long_short_return": 0.042026431299746037,
+      "observation_date": "2026-03-03",
+      "paired_count": 831,
+      "pool_size": 836,
+      "rank_ic": 0.20807318236677494,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 836,
+      "valid_label_count": 831
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.024511607363820076,
+      "group_return_2": -0.02905190922319889,
+      "group_return_3": -0.01038101501762867,
+      "group_return_4": -0.023483842611312866,
+      "group_return_5": -0.025789130479097366,
+      "ic": 0.008741654165287717,
+      "ic_eligible": true,
+      "label_coverage": 0.9940968122786304,
+      "long_short_return": -0.0012775231152772903,
+      "observation_date": "2026-03-04",
+      "paired_count": 842,
+      "pool_size": 847,
+      "rank_ic": 0.06759424869488698,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 847,
+      "valid_label_count": 842
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": -0.029752207919955254,
+      "group_return_2": -0.028968028724193573,
+      "group_return_3": -0.01209059078246355,
+      "group_return_4": -0.030353425070643425,
+      "group_return_5": -0.022613724693655968,
+      "ic": 0.03516596036263594,
+      "ic_eligible": true,
+      "label_coverage": 0.9941588785046729,
+      "long_short_return": 0.007138483226299286,
+      "observation_date": "2026-03-05",
+      "paired_count": 851,
+      "pool_size": 856,
+      "rank_ic": 0.06199358572871379,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 856,
+      "valid_label_count": 851
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.01916336826980114,
+      "group_return_2": 0.03899597004055977,
+      "group_return_3": 0.01316530816257,
+      "group_return_4": 0.01738634705543518,
+      "group_return_5": 0.024142039939761162,
+      "ic": 0.006238817743440677,
+      "ic_eligible": true,
+      "label_coverage": 0.9941656942823804,
+      "long_short_return": 0.004978671669960022,
+      "observation_date": "2026-03-06",
+      "paired_count": 852,
+      "pool_size": 857,
+      "rank_ic": 0.04124255512588705,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 857,
+      "valid_label_count": 852
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.034569885581731796,
+      "group_return_2": 0.015905095264315605,
+      "group_return_3": 0.0024888862390071154,
+      "group_return_4": 0.027795162051916122,
+      "group_return_5": 0.037315867841243744,
+      "ic": 0.06881229219625482,
+      "ic_eligible": true,
+      "label_coverage": 0.9941724941724942,
+      "long_short_return": 0.0027459822595119476,
+      "observation_date": "2026-03-09",
+      "paired_count": 853,
+      "pool_size": 858,
+      "rank_ic": 0.06795671821931859,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 858,
+      "valid_label_count": 853
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.009863743558526039,
+      "group_return_2": -0.00023728248197585344,
+      "group_return_3": -0.018551481887698174,
+      "group_return_4": 0.012543349526822567,
+      "group_return_5": 0.034774117171764374,
+      "ic": 0.09248582456715314,
+      "ic_eligible": true,
+      "label_coverage": 0.9942263279445728,
+      "long_short_return": 0.024910373613238335,
+      "observation_date": "2026-03-10",
+      "paired_count": 861,
+      "pool_size": 866,
+      "rank_ic": 0.0797110808722999,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 866,
+      "valid_label_count": 861
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.047102075070142746,
+      "group_return_2": 0.010563439689576626,
+      "group_return_3": 0.037423025816679,
+      "group_return_4": 0.03733180835843086,
+      "group_return_5": 0.03938840329647064,
+      "ic": -0.026957142104599534,
+      "ic_eligible": true,
+      "label_coverage": 0.9942196531791907,
+      "long_short_return": -0.007713671773672104,
+      "observation_date": "2026-03-11",
+      "paired_count": 860,
+      "pool_size": 865,
+      "rank_ic": 0.06010766836948365,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 865,
+      "valid_label_count": 860
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.04386281967163086,
+      "group_return_2": 0.011738748289644718,
+      "group_return_3": null,
+      "group_return_4": -0.005002997815608978,
+      "group_return_5": 0.04842575266957283,
+      "ic": 0.011118905642697898,
+      "ic_eligible": true,
+      "label_coverage": 0.9941724941724942,
+      "long_short_return": 0.004562932997941971,
+      "observation_date": "2026-03-12",
+      "paired_count": 853,
+      "pool_size": 858,
+      "rank_ic": 0.12983778201735016,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 858,
+      "valid_label_count": 853
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.05330045148730278,
+      "group_return_2": 0.017911400645971298,
+      "group_return_3": -0.0032543838024139404,
+      "group_return_4": 0.0626896396279335,
+      "group_return_5": 0.06554178148508072,
+      "ic": 0.08905247531208509,
+      "ic_eligible": true,
+      "label_coverage": 0.9941451990632318,
+      "long_short_return": 0.012241329997777939,
+      "observation_date": "2026-03-13",
+      "paired_count": 849,
+      "pool_size": 854,
+      "rank_ic": 0.17229585688423776,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 854,
+      "valid_label_count": 849
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.05761623755097389,
+      "group_return_2": 0.018896615132689476,
+      "group_return_3": 0.029678022488951683,
+      "group_return_4": 0.07696325331926346,
+      "group_return_5": 0.0597778744995594,
+      "ic": 0.15899973561644493,
+      "ic_eligible": true,
+      "label_coverage": 0.9940546967895363,
+      "long_short_return": 0.0021616369485855103,
+      "observation_date": "2026-03-16",
+      "paired_count": 836,
+      "pool_size": 841,
+      "rank_ic": 0.15748431412734085,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 841,
+      "valid_label_count": 836
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 1,
+      "group_return_1": 0.03111063875257969,
+      "group_return_2": 0.006712312810122967,
+      "group_return_3": 0.017010586336255074,
+      "group_return_4": 0.03260822221636772,
+      "group_return_5": 0.0929798036813736,
+      "ic": 0.1958213584167536,
+      "ic_eligible": true,
+      "label_coverage": 0.9939975990396158,
+      "long_short_return": 0.06186916492879391,
+      "observation_date": "2026-03-17",
+      "paired_count": 828,
+      "pool_size": 833,
+      "rank_ic": 0.16658851416408035,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 833,
+      "valid_label_count": 828
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.05220819637179375,
+      "group_return_2": 0.024486612528562546,
+      "group_return_3": 0.057672686874866486,
+      "group_return_4": 0.06705119460821152,
+      "group_return_5": 0.08066041022539139,
+      "ic": 0.2445872051899869,
+      "ic_eligible": true,
+      "label_coverage": 0.9939320388349514,
+      "long_short_return": 0.02845221385359764,
+      "observation_date": "2026-03-18",
+      "paired_count": 819,
+      "pool_size": 824,
+      "rank_ic": 0.20670097537636495,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 824,
+      "valid_label_count": 819
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.07382655888795853,
+      "group_return_2": 0.041005805134773254,
+      "group_return_3": 0.09184642136096954,
+      "group_return_4": 0.12938502430915833,
+      "group_return_5": 0.1342255175113678,
+      "ic": 0.2663880657886285,
+      "ic_eligible": true,
+      "label_coverage": 0.9939246658566221,
+      "long_short_return": 0.06039895862340927,
+      "observation_date": "2026-03-19",
+      "paired_count": 818,
+      "pool_size": 823,
+      "rank_ic": 0.274756923760945,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 823,
+      "valid_label_count": 818
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.05669943615794182,
+      "group_return_2": 0.025773195549845695,
+      "group_return_3": 0.015891890972852707,
+      "group_return_4": 0.08724760264158249,
+      "group_return_5": 0.11772014945745468,
+      "ic": 0.2495582147350567,
+      "ic_eligible": true,
+      "label_coverage": 0.9951278928136419,
+      "long_short_return": 0.06102071329951286,
+      "observation_date": "2026-03-23",
+      "paired_count": 817,
+      "pool_size": 821,
+      "rank_ic": 0.22969995514543057,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 821,
+      "valid_label_count": 817
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.03054988384246826,
+      "group_return_2": -0.011889547109603882,
+      "group_return_3": -0.004355129785835743,
+      "group_return_4": 0.0469052717089653,
+      "group_return_5": 0.06386864185333252,
+      "ic": 0.20965459150641363,
+      "ic_eligible": true,
+      "label_coverage": 0.9951573849878934,
+      "long_short_return": 0.03331875801086426,
+      "observation_date": "2026-03-24",
+      "paired_count": 822,
+      "pool_size": 826,
+      "rank_ic": 0.09230380532062778,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 826,
+      "valid_label_count": 822
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.03560406342148781,
+      "group_return_2": null,
+      "group_return_3": -0.010966809466481209,
+      "group_return_4": 0.03809250146150589,
+      "group_return_5": 0.05237047001719475,
+      "ic": 0.19131106621373548,
+      "ic_eligible": true,
+      "label_coverage": 0.9951397326852977,
+      "long_short_return": 0.01676640659570694,
+      "observation_date": "2026-03-25",
+      "paired_count": 819,
+      "pool_size": 823,
+      "rank_ic": 0.13463520661127898,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 823,
+      "valid_label_count": 819
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.023921173065900803,
+      "group_return_2": -0.019182072952389717,
+      "group_return_3": null,
+      "group_return_4": 0.048971910029649734,
+      "group_return_5": 0.06073101982474327,
+      "ic": 0.2150165216343988,
+      "ic_eligible": true,
+      "label_coverage": 0.9951278928136419,
+      "long_short_return": 0.03680984675884247,
+      "observation_date": "2026-03-26",
+      "paired_count": 817,
+      "pool_size": 821,
+      "rank_ic": 0.18309138542773962,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 821,
+      "valid_label_count": 817
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.08702749758958817,
+      "group_return_2": 0.011230900883674622,
+      "group_return_3": null,
+      "group_return_4": 0.05064389854669571,
+      "group_return_5": 0.11165084689855576,
+      "ic": 0.17974456252966425,
+      "ic_eligible": true,
+      "label_coverage": 0.995079950799508,
+      "long_short_return": 0.02462334930896759,
+      "observation_date": "2026-03-27",
+      "paired_count": 809,
+      "pool_size": 813,
+      "rank_ic": 0.14319598162071734,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 813,
+      "valid_label_count": 809
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.09951651841402054,
+      "group_return_2": 0.08138512074947357,
+      "group_return_3": 0.025637926533818245,
+      "group_return_4": 0.112416572868824,
+      "group_return_5": 0.13779360055923462,
+      "ic": 0.1259785914556968,
+      "ic_eligible": true,
+      "label_coverage": 1.0,
+      "long_short_return": 0.03827708214521408,
+      "observation_date": "2026-03-30",
+      "paired_count": 806,
+      "pool_size": 806,
+      "rank_ic": 0.05483488905427173,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 806,
+      "valid_label_count": 806
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.0765867680311203,
+      "group_return_2": 0.010281716473400593,
+      "group_return_3": -0.02530073933303356,
+      "group_return_4": -0.0007970716105774045,
+      "group_return_5": 0.06427125632762909,
+      "ic": 0.04685017029064348,
+      "ic_eligible": true,
+      "label_coverage": 1.0,
+      "long_short_return": -0.012315511703491211,
+      "observation_date": "2026-03-31",
+      "paired_count": 799,
+      "pool_size": 799,
+      "rank_ic": -0.034670952947892034,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 799,
+      "valid_label_count": 799
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.0695701315999031,
+      "group_return_2": -0.005555800162255764,
+      "group_return_3": null,
+      "group_return_4": 0.04331947863101959,
+      "group_return_5": 0.08836566656827927,
+      "ic": 0.1646723038940804,
+      "ic_eligible": true,
+      "label_coverage": 1.0,
+      "long_short_return": 0.01879553496837616,
+      "observation_date": "2026-04-01",
+      "paired_count": 800,
+      "pool_size": 800,
+      "rank_ic": 0.11520770945253048,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 800,
+      "valid_label_count": 800
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.12025278806686401,
+      "group_return_2": null,
+      "group_return_3": 0.009012078866362572,
+      "group_return_4": 0.04991825297474861,
+      "group_return_5": 0.08989714831113815,
+      "ic": 0.08717989052101532,
+      "ic_eligible": true,
+      "label_coverage": 1.0,
+      "long_short_return": -0.03035563975572586,
+      "observation_date": "2026-04-02",
+      "paired_count": 788,
+      "pool_size": 788,
+      "rank_ic": 0.026491810876414043,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 788,
+      "valid_label_count": 788
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.12320773303508759,
+      "group_return_2": 0.01667613722383976,
+      "group_return_3": null,
+      "group_return_4": 0.08238150179386139,
+      "group_return_5": 0.08398385345935822,
+      "ic": 0.12466449276943078,
+      "ic_eligible": true,
+      "label_coverage": 1.0,
+      "long_short_return": -0.03922387957572937,
+      "observation_date": "2026-04-03",
+      "paired_count": 777,
+      "pool_size": 777,
+      "rank_ic": 0.10357227928896902,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 777,
+      "valid_label_count": 777
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.033175237476825714,
+      "group_return_2": 0.02282780595123768,
+      "group_return_3": null,
+      "group_return_4": 0.08196409791707993,
+      "group_return_5": 0.09808722138404846,
+      "ic": 0.12970330413355277,
+      "ic_eligible": true,
+      "label_coverage": 0.9987046632124352,
+      "long_short_return": 0.06491198390722275,
+      "observation_date": "2026-04-06",
+      "paired_count": 771,
+      "pool_size": 772,
+      "rank_ic": 0.14536370900971926,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 772,
+      "valid_label_count": 771
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.05052271857857704,
+      "group_return_2": -0.015223713591694832,
+      "group_return_3": null,
+      "group_return_4": 0.05895890295505524,
+      "group_return_5": 0.05528412014245987,
+      "ic": 0.11233658231098698,
+      "ic_eligible": true,
+      "label_coverage": 0.9986962190352021,
+      "long_short_return": 0.004761401563882828,
+      "observation_date": "2026-04-07",
+      "paired_count": 766,
+      "pool_size": 767,
+      "rank_ic": 0.12429562757857163,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 767,
+      "valid_label_count": 766
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.04759904369711876,
+      "group_return_2": -0.006693361792713404,
+      "group_return_3": null,
+      "group_return_4": 0.10511407256126404,
+      "group_return_5": 0.06185773387551308,
+      "ic": 0.12217071005706792,
+      "ic_eligible": true,
+      "label_coverage": 0.9986702127659575,
+      "long_short_return": 0.014258690178394318,
+      "observation_date": "2026-04-08",
+      "paired_count": 751,
+      "pool_size": 752,
+      "rank_ic": 0.19666645104396208,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 752,
+      "valid_label_count": 751
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": -0.008318392559885979,
+      "group_return_2": 0.005898033734411001,
+      "group_return_3": null,
+      "group_return_4": 0.10904797911643982,
+      "group_return_5": 0.04995028302073479,
+      "ic": 0.09047295360461045,
+      "ic_eligible": true,
+      "label_coverage": 0.9986684420772304,
+      "long_short_return": 0.058268675580620766,
+      "observation_date": "2026-04-09",
+      "paired_count": 750,
+      "pool_size": 751,
+      "rank_ic": 0.16494990093086825,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 751,
+      "valid_label_count": 750
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.04385269805788994,
+      "group_return_2": 0.012174191884696484,
+      "group_return_3": null,
+      "group_return_4": 0.09760352969169617,
+      "group_return_5": 0.028672583401203156,
+      "ic": -0.00916031385698721,
+      "ic_eligible": true,
+      "label_coverage": 0.9960106382978723,
+      "long_short_return": -0.015180114656686783,
+      "observation_date": "2026-04-10",
+      "paired_count": 749,
+      "pool_size": 752,
+      "rank_ic": 0.08877768554872029,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 752,
+      "valid_label_count": 749
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": 0.003333695698529482,
+      "group_return_2": -0.0009572418639436364,
+      "group_return_3": null,
+      "group_return_4": 0.0710100531578064,
+      "group_return_5": 0.013119672425091267,
+      "ic": 0.012156719551720619,
+      "ic_eligible": true,
+      "label_coverage": 0.996,
+      "long_short_return": 0.009785976726561785,
+      "observation_date": "2026-04-13",
+      "paired_count": 747,
+      "pool_size": 750,
+      "rank_ic": 0.07559835144202466,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 750,
+      "valid_label_count": 747
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": -0.017062775790691376,
+      "group_return_2": 0.007543365471065044,
+      "group_return_3": null,
+      "group_return_4": 0.06518741697072983,
+      "group_return_5": 0.016449958086013794,
+      "ic": 0.04816412646997276,
+      "ic_eligible": true,
+      "label_coverage": 0.9946308724832215,
+      "long_short_return": 0.03351273387670517,
+      "observation_date": "2026-04-14",
+      "paired_count": 741,
+      "pool_size": 745,
+      "rank_ic": 0.09825992607394944,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 745,
+      "valid_label_count": 741
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 2,
+      "group_return_1": -0.049514684826135635,
+      "group_return_2": -0.015888025984168053,
+      "group_return_3": null,
+      "group_return_4": 0.03987199440598488,
+      "group_return_5": -0.009372614324092865,
+      "ic": 0.04773376544980518,
+      "ic_eligible": true,
+      "label_coverage": 0.9946524064171123,
+      "long_short_return": 0.04014207050204277,
+      "observation_date": "2026-04-15",
+      "paired_count": 744,
+      "pool_size": 748,
+      "rank_ic": 0.11472666118223163,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 748,
+      "valid_label_count": 744
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 3,
+      "group_return_1": 0.01357810664921999,
+      "group_return_2": -0.004828527569770813,
+      "group_return_3": -6.144655344542116e-05,
+      "group_return_4": 0.050799284130334854,
+      "group_return_5": 0.014947130344808102,
+      "ic": 0.0396005026974055,
+      "ic_eligible": true,
+      "label_coverage": 0.9946879150066401,
+      "long_short_return": 0.0013690236955881119,
+      "observation_date": "2026-04-16",
+      "paired_count": 749,
+      "pool_size": 753,
+      "rank_ic": 0.09434260497606083,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 753,
+      "valid_label_count": 749
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 3,
+      "group_return_1": -0.011664020828902721,
+      "group_return_2": -0.001558456220664084,
+      "group_return_3": 0.01292856689542532,
+      "group_return_4": 0.07546435296535492,
+      "group_return_5": 0.039512164890766144,
+      "ic": 0.13454260020448017,
+      "ic_eligible": true,
+      "label_coverage": 0.9946879150066401,
+      "long_short_return": 0.051176185719668865,
+      "observation_date": "2026-04-17",
+      "paired_count": 749,
+      "pool_size": 753,
+      "rank_ic": 0.2068388002392246,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 753,
+      "valid_label_count": 749
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 3,
+      "group_return_1": -0.01860436052083969,
+      "group_return_2": 0.008210225962102413,
+      "group_return_3": 0.024596765637397766,
+      "group_return_4": 0.0886901319026947,
+      "group_return_5": 0.08107180893421173,
+      "ic": 0.20875921367763786,
+      "ic_eligible": true,
+      "label_coverage": 0.9946524064171123,
+      "long_short_return": 0.09967616945505142,
+      "observation_date": "2026-04-20",
+      "paired_count": 744,
+      "pool_size": 748,
+      "rank_ic": 0.258438353722646,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 748,
+      "valid_label_count": 744
+    },
+    {
+      "factor_coverage": 1.0,
+      "fold": 3,
+      "group_return_1": 0.01080324500799179,
+      "group_return_2": 0.038724135607481,
+      "group_return_3": -0.0030491063371300697,
+      "group_return_4": 0.09653346985578537,
+      "group_return_5": 0.07411564886569977,
+      "ic": 0.13016758571828915,
+      "ic_eligible": true,
+      "label_coverage": 0.9945872801082544,
+      "long_short_return": 0.06331240385770798,
+      "observation_date": "2026-04-21",
+      "paired_count": 735,
+      "pool_size": 739,
+      "rank_ic": 0.17729484828391487,
+      "segment": "test",
+      "source": "lightgbm",
+      "unavailable_reasons": [],
+      "valid_factor_count": 739,
+      "valid_label_count": 735
+    }
+  ],
+  "feature_importance_row_count": 1080,
+  "full_output": "/app/var/direct-59edc062fa2f2681cb52.json (9.9 MB, 35333 prediction rows)",
+  "predictions_row_count": 35333,
+  "summary": {
+    "best_iterations": [
+      11,
+      48,
+      46
+    ],
+    "elapsed_seconds": 291.274,
+    "excluded_metric_dates": 0,
+    "feature_cache_path": "/app/var/qlib-feature-cache/2f2dae72f568ea627eb6",
+    "feature_count": 360,
+    "feature_definition_checksum": "15e7b17f19d01cae2888edf6da78c1fa02f3cb7e75e8b774e2bb458a568542c6",
+    "feature_set": "alpha360",
+    "fold_count": 3,
+    "folds": [
+      {
+        "best_iteration": 11,
+        "best_valid_l2": 0.9983481912393967,
+        "best_valid_rank_ic": -0.023520089336945584,
+        "constant_baseline_l2": 0.9976312118863787,
+        "evaluated_rounds": 111,
+        "fold": 1,
+        "score_std": 0.009319174425690852,
+        "test": [
+          "2026-02-17",
+          "2026-03-17"
+        ],
+        "test_rows": 16582,
+        "train": [
+          "2024-09-02",
+          "2025-09-11"
+        ],
+        "train_rows": 161887,
+        "unique_scores": 254,
+        "valid": [
+          "2025-10-16",
+          "2026-01-15"
+        ],
+        "valid_rows": 41810
+      },
+      {
+        "best_iteration": 48,
+        "best_valid_l2": 0.9927304262095477,
+        "best_valid_rank_ic": 0.15900451943011046,
+        "constant_baseline_l2": 0.9976312371604164,
+        "evaluated_rounds": 148,
+        "fold": 2,
+        "score_std": 0.02297630001238917,
+        "test": [
+          "2026-03-18",
+          "2026-04-15"
+        ],
+        "test_rows": 15758,
+        "train": [
+          "2024-10-02",
+          "2025-10-14"
+        ],
+        "train_rows": 163245,
+        "unique_scores": 1898,
+        "valid": [
+          "2025-11-14",
+          "2026-02-13"
+        ],
+        "valid_rows": 42070
+      },
+      {
+        "best_iteration": 46,
+        "best_valid_l2": 0.9924569602543281,
+        "best_valid_rank_ic": 0.13535657856581215,
+        "constant_baseline_l2": 0.9976315330906861,
+        "evaluated_rounds": 146,
+        "fold": 3,
+        "score_std": 0.018764470127801768,
+        "test": [
+          "2026-04-16",
+          "2026-04-21"
+        ],
+        "test_rows": 2993,
+        "train": [
+          "2024-10-31",
+          "2025-11-12"
+        ],
+        "train_rows": 164752,
+        "unique_scores": 1107,
+        "valid": [
+          "2025-12-15",
+          "2026-03-16"
+        ],
+        "valid_rows": 44153
+      }
+    ],
+    "label_expression": "Ref($close, -21) / Ref($close, -1) - 1",
+    "label_horizon": 20,
+    "max_pool_size": 866,
+    "min_pool_size": 590,
+    "model_params": {
+      "bagging_fraction": 0.9784248134360403,
+      "bagging_freq": 1,
+      "bagging_seed": 20260829,
+      "data_random_seed": 20260829,
+      "deterministic": true,
+      "early_stopping_rounds": 100,
+      "feature_fraction": 0.8848978861573316,
+      "feature_fraction_seed": 20260829,
+      "force_row_wise": true,
+      "lambda_l1": 0.0,
+      "lambda_l2": 51.69684800047769,
+      "learning_rate": 0.016100315611683805,
+      "max_depth": 3,
+      "min_data_in_leaf": 321,
+      "num_boost_round": 2000,
+      "num_leaves": 7,
+      "objective": "mse",
+      "seed": 20260829
+    },
+    "pool_warnings": [
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-09-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-10-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-11-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2024-12-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "master_dated_after_as_of",
+        "date": "2025-01-07",
+        "detail": {
+          "as_of": "2025-01-07",
+          "dated_after_as_of": false,
+          "master_as_of": "2024-12-30",
+          "staleness_days": 8
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "master_dated_after_as_of",
+        "date": "2025-01-08",
+        "detail": {
+          "as_of": "2025-01-08",
+          "dated_after_as_of": false,
+          "master_as_of": "2024-12-30",
+          "staleness_days": 9
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "master_dated_after_as_of",
+        "date": "2025-01-09",
+        "detail": {
+          "as_of": "2025-01-09",
+          "dated_after_as_of": false,
+          "master_as_of": "2024-12-30",
+          "staleness_days": 10
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-01-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-02-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-03-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-04-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-05-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-06-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-07-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-08-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-09-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-10-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-11-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2025-12-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "master_dated_after_as_of",
+        "date": "2026-01-07",
+        "detail": {
+          "as_of": "2026-01-07",
+          "dated_after_as_of": false,
+          "master_as_of": "2025-12-30",
+          "staleness_days": 8
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "master_dated_after_as_of",
+        "date": "2026-01-08",
+        "detail": {
+          "as_of": "2026-01-08",
+          "dated_after_as_of": false,
+          "master_as_of": "2025-12-30",
+          "staleness_days": 9
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-22",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-28",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-29",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-01-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-02-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-04",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-05",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-11",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-12",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-18",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-19",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-23",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-24",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-25",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-26",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-27",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-30",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-03-31",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-01",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-02",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-03",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-06",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-07",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-08",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-09",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-10",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-13",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-14",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-15",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-16",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-17",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-20",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      },
+      {
+        "code": "free_data_no_delisting_history",
+        "date": "2026-04-21",
+        "detail": {
+          "reason": "The instrument roster carries no listing-status field, so a security absent from it cannot be distinguished from one we never fetched."
+        }
+      }
+    ],
+    "prediction_dates": 44,
+    "provider_logical_checksum": "fb5503e24061bf9dbb013bf8d3af2a71bc8b1b84b8c70651bf7edaff24b35125",
+    "provider_path": "/app/var/qlib-cli-data/11e402a7-27dc-4b36-8054-ba1f7bde2216/schema-2_pyqlib-0.9.7",
+    "purge_horizon": 20,
+    "rolling_step": 20,
+    "rolling_train_policy": 252,
+    "snapshot_id": "11e402a7-27dc-4b36-8054-ba1f7bde2216",
+    "snapshot_version": 3,
+    "stock_pool_policy_fingerprint": "04e69e8796b1fe6a",
+    "stop_metric": "rank_ic",
+    "test_ic_dates": 44,
+    "test_ic_mean": 0.11530316056600366,
+    "test_icir": 1.5611170062529538,
+    "test_rank_ic_mean": 0.1446214406876005,
+    "test_rank_icir": 1.9853440764721553,
+    "test_rows": 35333,
+    "train_rows": 489884,
+    "valid_prediction_dates": 44,
+    "valid_rows": 128033
+  }
+}

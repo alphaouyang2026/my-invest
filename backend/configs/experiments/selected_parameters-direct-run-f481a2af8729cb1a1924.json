@@ -1,0 +1,31 @@
+{
+  "feature_batch_size": 64,
+  "feature_set": "alpha158",
+  "label_horizon": 20,
+  "model_params": {
+    "bagging_fraction": 0.9517080969938171,
+    "bagging_freq": 1,
+    "early_stopping_rounds": 100,
+    "feature_fraction": 0.9404320868432198,
+    "lambda_l1": 1,
+    "lambda_l2": 3.715136563100493,
+    "learning_rate": 0.032054181673393856,
+    "max_depth": 4,
+    "min_data_in_leaf": 1638,
+    "num_boost_round": 2000,
+    "num_leaves": 7
+  },
+  "num_threads": 2,
+  "provider_root": "/app/var/qlib-cli-data",
+  "purge_horizon": 20,
+  "qlib_kernels": 2,
+  "rolling_step": 20,
+  "scan_batch_rows": 4096,
+  "seed": 20260829,
+  "snapshot_id": "11e402a7-27dc-4b36-8054-ba1f7bde2216",
+  "stop_metric": "rank_ic",
+  "test": "2026-02-17:2026-04-21",
+  "train": "2024-09-02:2025-09-11",
+  "train_window": "expanding",
+  "valid": "2025-10-16:2026-01-15"
+}
