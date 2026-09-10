@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 from pathlib import Path
 from collections.abc import Mapping
@@ -28,6 +28,9 @@ import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from app.experiments.artifact_cache import (
+    digest, exclusive_lock, read_json, seal, verified, write_json, write_parquet,
+)
 from app.experiments.feature_shard_cache import (
     DEFAULT_FEATURE_BATCH_SIZE,
     DEFAULT_QLIB_KERNELS,
@@ -212,8 +215,10 @@ def run_direct_prediction(
     # without moving the span. Building the superset keeps the cache a function
     # of what identifies it, and lets runs that differ only in fold geometry
     # share one.
-    universe, universe_sizes, symbols, warnings, policy_fingerprint = _build_universe(
-        session, snapshot, calendar, _span_dates(calendar, config), feature_set.max_window
+    artifact_cache_root = cache_root or (config.provider_root.parent / "qlib-feature-cache")
+    universe, universe_sizes, symbols, warnings, policy_fingerprint = _cached_universe(
+        session, snapshot, calendar, _span_dates(calendar, config), feature_set.max_window,
+        cache_root=artifact_cache_root,
     )
     params = resolve_model_params(config.model_params, seed=config.seed)
     try:
@@ -224,7 +229,7 @@ def run_direct_prediction(
             universe,
             snapshot=snapshot,
             policy_fingerprint=policy_fingerprint,
-            cache_root=cache_root or (config.provider_root.parent / "qlib-feature-cache"),
+            cache_root=artifact_cache_root,
             # The run's own calendar decides which days it needs; the cache only
             # knows which it holds. Passed to assembly rather than asked of the
             # reader afterwards, so a reader that was never checked cannot exist.
@@ -294,7 +299,7 @@ def run_direct_prediction(
     importance = pd.concat([outcome.importance for outcome in outcomes], ignore_index=True)
     curves = pd.concat([outcome.curve for outcome in outcomes], ignore_index=True)
     if artifact_dir is not None:
-        _parquet(Path(artifact_dir) / "learning_curves.parquet", curves)
+        write_parquet(Path(artifact_dir) / "learning_curves.parquet", curves)
 
     prediction_dates = int(predictions["datetime"].nunique()) if not predictions.empty else 0
     pool_values = list(universe_sizes.values())
@@ -563,6 +568,70 @@ def _build_universe(session, snapshot, calendar, days, max_window):
                 seen_warnings.add(key)
                 warnings.append(payload)
     return universe, sizes, symbols, warnings, fingerprint
+
+
+def _universe_identity(snapshot, days, policy) -> str:
+    """What the pool is a function of, and nothing else.
+
+    Not the feature set that asked for it: two feature sets wanting the same
+    history length want the same pool, and `required_history_days` is already
+    here. Not the fold geometry either -- the pool is built for the whole span,
+    so a run that only moves fold boundaries reads this one back.
+    """
+    return digest(
+        {
+            "snapshot": [str(snapshot.id), snapshot.version, snapshot.bar_publish_sequence],
+            "calendar": str(snapshot.calendar_publication_id),
+            "policy": asdict(policy),
+            "days": [day.isoformat() for day in sorted(days)],
+        }
+    )
+
+
+def _cached_universe(session, snapshot, calendar, days, max_window, *, cache_root: Path):
+    """Build the pool once per dataset instead of once per model.
+
+    Every trial in a search spans the same days under the same policy, and each
+    day is a database round trip: rebuilding it per model cost more than the
+    training it preceded. Keyed like the feature cache -- by the data, never by
+    the code -- so an edit anywhere does not discard a pool whose contents did
+    not change.
+    """
+    required = max(max_window, 20)
+    policy = replace(
+        DEFAULT_POLICY,
+        required_history_days=required,
+        required_bar_offsets=tuple(sorted({required, 20, 5, 1}, reverse=True)),
+    )
+    if not days:
+        raise DirectExperimentConfigError("The requested span contains no open trading day")
+    identity = _universe_identity(snapshot, days, policy)
+    root = cache_root / f"universe-{identity[:20]}"
+    with exclusive_lock(root):
+        try:
+            if not verified(root, identity):
+                universe, sizes, symbols, warnings, fingerprint = _build_universe(
+                    session, snapshot, calendar, days, max_window
+                )
+                write_json(root / "universe.json", {
+                    "universe": {day.isoformat(): sorted(members)
+                                 for day, members in universe.items()},
+                    "sizes": {day.isoformat(): size for day, size in sizes.items()},
+                    "symbols": symbols,
+                    "warnings": warnings,
+                    "policy_fingerprint": fingerprint,
+                })
+                seal(root, identity)
+            saved = read_json(root / "universe.json")
+        except (OSError, ValueError) as exc:
+            raise DirectExperimentDataError(f"Stock pool cache is unusable: {exc}") from exc
+    return (
+        {date.fromisoformat(day): set(members) for day, members in saved["universe"].items()},
+        {date.fromisoformat(day): size for day, size in saved["sizes"].items()},
+        saved["symbols"],
+        saved["warnings"],
+        saved["policy_fingerprint"],
+    )
 
 
 @dataclass(frozen=True)

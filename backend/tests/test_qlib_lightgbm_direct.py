@@ -332,7 +332,33 @@ def test_cli_exposes_three_independent_subcommands() -> None:
     assert resolved.model_params is None
 
 
-def test_direct_prediction_retrains_each_fold_and_only_reads_session(monkeypatch, tmp_path) -> None:
+class _FakeBooster:
+    """As much of a LightGBM booster as the artifact path uses: it saves a file."""
+
+    best_iteration = 3
+
+    def __init__(self, number: int) -> None:
+        self.number = number
+
+    def save_model(self, path, *, num_iteration):
+        Path(path).write_text(
+            f"fold {self.number} saved at iteration {num_iteration}", encoding="utf-8"
+        )
+
+
+@pytest.fixture
+def direct_run(monkeypatch, tmp_path):
+    """One whole run with Qlib, the database and LightGBM replaced by fakes.
+
+    What stays real is the sequence `run_direct_prediction` itself performs, which
+    is what the tests below are about. Shared rather than repeated: the setup is
+    long enough that a second copy would drift from this one.
+
+    `cache_root` is handed back with it. Left to its default the run caches its
+    stock pool beside the configured provider -- a real directory outside the test
+    -- where a stale pool would satisfy a later run and the fake below would never
+    be called.
+    """
     days = list(pd.bdate_range("2025-01-01", "2025-06-30").date)
     snapshot = SimpleNamespace(
         id=SNAPSHOT_ID,
@@ -450,7 +476,7 @@ def test_direct_prediction_retrains_each_fold_and_only_reads_session(monkeypatch
         )
         daily.insert(0, "fold", number)
         return FoldOutcome(
-            number, SimpleNamespace(best_iteration=3), scores, daily,
+            number, _FakeBooster(number), scores, daily,
             pd.DataFrame({"fold": [number], "feature_name": ["F0"], "gain": [1.0], "split": [1]}),
             pd.DataFrame({"fold": [number], "dataset": ["valid"], "metric": ["l2"],
                           "iteration": [1], "value": [0.5]}),
@@ -460,7 +486,21 @@ def test_direct_prediction_retrains_each_fold_and_only_reads_session(monkeypatch
 
     monkeypatch.setattr("app.experiments.qlib_lightgbm_direct.run_fold", fake_run_fold)
 
-    result = run_direct_prediction(session, config)
+    return SimpleNamespace(
+        session=session,
+        config=config,
+        calendar=calendar,
+        cache_root=tmp_path / "cache-root",
+        trained_folds=trained_folds,
+        required=required,
+    )
+
+
+def test_direct_prediction_retrains_each_fold_and_only_reads_session(direct_run) -> None:
+    session, config, calendar = direct_run.session, direct_run.config, direct_run.calendar
+    trained_folds, required = direct_run.trained_folds, direct_run.required
+
+    result = run_direct_prediction(session, config, cache_root=direct_run.cache_root)
 
     assert trained_folds == [1, 2]
     # The run states which days it needs as a condition of getting a reader.
@@ -474,6 +514,39 @@ def test_direct_prediction_retrains_each_fold_and_only_reads_session(monkeypatch
     assert session.get_calls[0][1] == SNAPSHOT_ID
     assert not hasattr(session, "add")
     assert not hasattr(session, "commit")
+
+
+def test_an_artifact_directory_receives_the_learning_curves(direct_run, tmp_path) -> None:
+    """The only caller that asks for artifacts is a search, and it ranks on these.
+
+    Worth its own test because the search suite fakes this whole function out and
+    writes the file itself, so no test reached the real write: a call here to a
+    function that did not exist survived review and every test run, and failed on
+    the first real search instead.
+    """
+    artifacts = tmp_path / "artifacts"
+
+    run_direct_prediction(
+        direct_run.session, direct_run.config,
+        cache_root=direct_run.cache_root, artifact_dir=artifacts,
+    )
+
+    written = pd.read_parquet(artifacts / "learning_curves.parquet")
+    assert list(written.columns) == ["fold", "dataset", "metric", "iteration", "value"]
+    assert sorted(written["fold"].unique()) == [1, 2]
+    assert sorted(path.name for path in (artifacts / "models").iterdir()) == [
+        "fold-1.txt", "fold-2.txt",
+    ]
+
+
+def test_without_an_artifact_directory_the_run_writes_no_curves(direct_run, tmp_path) -> None:
+    """The command line prints a summary and asks for no files; it must leave none."""
+    before = sorted(path.name for path in tmp_path.iterdir())
+
+    run_direct_prediction(direct_run.session, direct_run.config, cache_root=direct_run.cache_root)
+
+    assert not list(tmp_path.rglob("learning_curves.parquet"))
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted({*before, "cache-root"})
 
 
 # ---------------------------------------------------------------------------
