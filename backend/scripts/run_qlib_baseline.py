@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from app.experiments.artifact_cache import (
-    digest, exclusive_lock, file_digest, read_json, seal, verified, write_json,
+    digest, exclusive_lock, file_digest, read_json, seal, verified, write_json, write_parquet,
 )
 
 
@@ -68,7 +68,7 @@ def main(argv=None):
     args = p.parse_args(argv)
     config, reference = read_json(args.config), read_reference(args.reference)
     from app.experiments.qlib_lightgbm_direct import DateRange, DirectPredictionConfig, run_direct_prediction
-    from app.experiments.search_runner import code_identity, environment_identity, parquet
+    from app.experiments.search_runner import code_identity, environment_identity
     from app.db.session import get_sessionmaker
     direct = DirectPredictionConfig(
         snapshot_id=uuid.UUID(config["snapshot_id"]), feature_set=config["feature_set"],
@@ -96,7 +96,7 @@ def main(argv=None):
         write_json(root / "summary.json", result.summary)
         write_json(root / "comparison.json", comparison)
         for name in ("daily_ic", "predictions", "feature_importance"):
-            parquet(root / f"{name}.parquet", getattr(result, name))
+            write_parquet(root / f"{name}.parquet", getattr(result, name))
         seal(root, identity)
         print(comparison)
         return 0 if comparison["matches"] else 1
